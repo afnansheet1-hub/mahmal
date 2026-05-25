@@ -12,8 +12,12 @@ const els = {
   totalSales: document.querySelector("#totalSales"),
   totalQty: document.querySelector("#totalQty"),
   productCount: document.querySelector("#productCount"),
+  avgUnit: document.querySelector("#avgUnit"),
+  topQty: document.querySelector("#topQty"),
   reportMeta: document.querySelector("#reportMeta"),
   insights: document.querySelector("#insights"),
+  focusCards: document.querySelector("#focusCards"),
+  priceBands: document.querySelector("#priceBands"),
   barChart: document.querySelector("#barChart"),
   productsBody: document.querySelector("#productsBody"),
   search: document.querySelector("#searchInput"),
@@ -34,6 +38,14 @@ let allProducts = [];
 function setStatus(text, type = "ready") {
   els.statusText.textContent = text;
   els.statusDot.className = `status-dot ${type === "ready" ? "" : type}`;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 function cleanText(value) {
@@ -117,7 +129,7 @@ function rowFromLine(line) {
   }
 
   product = product.replace(/\s+/g, " ");
-  return { product, barcode, qty, amount };
+  return { product, barcode, qty, amount, unitPrice: amount / qty };
 }
 
 function mergeContinuationRows(rows) {
@@ -128,11 +140,12 @@ function mergeContinuationRows(rows) {
     .map((row) => ({
       ...row,
       product: row.product.replace(/\s+Each$/i, "").trim(),
+      unitPrice: row.amount / row.qty,
     }));
 }
 
-async function analyzePdf(source, name, previewUrl) {
-  setStatus("جاري قراءة الصفحات واستخراج جدول المبيعات...", "loading");
+async function analyzePdf(source, name) {
+  setStatus("جاري قراءة الصفحات واستخراج جدول المبيعات والمؤشرات التفصيلية...", "loading");
   els.fileName.textContent = name;
   els.previewLabel.textContent = "الصفحة الأولى";
 
@@ -155,12 +168,12 @@ async function analyzePdf(source, name, previewUrl) {
 
   allProducts = mergeContinuationRows(rows);
   renderDashboard(pdf.numPages, allProducts, pageTexts.join(" "), name);
-  setStatus("تم تحليل التقرير بنجاح. يمكنك رفع ملف آخر للمقارنة أو التحديث.", "ready");
+  setStatus("تم تحليل التقرير بنجاح. الواجهة تعرض الآن مؤشرات تفصيلية قابلة للبحث والمراجعة.", "ready");
 }
 
 async function renderPreview(pdf) {
   const page = await pdf.getPage(1);
-  const viewport = page.getViewport({ scale: 1.55 });
+  const viewport = page.getViewport({ scale: 1.6 });
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
   canvas.width = Math.floor(viewport.width);
@@ -172,7 +185,11 @@ async function renderPreview(pdf) {
 function renderDashboard(pageCount, products, allText, name) {
   const totalSales = products.reduce((sum, row) => sum + row.amount, 0);
   const totalQty = products.reduce((sum, row) => sum + row.qty, 0);
-  const topProduct = [...products].sort((a, b) => b.amount - a.amount)[0];
+  const avgUnit = totalQty ? totalSales / totalQty : 0;
+  const sortedByValue = [...products].sort((a, b) => b.amount - a.amount);
+  const sortedByQty = [...products].sort((a, b) => b.qty - a.qty);
+  const topProduct = sortedByValue[0];
+  const topQtyProduct = sortedByQty[0];
   const dateMatch = allText.match(/\b20\d{2}-\d{2}-\d{2}\b/);
   const sessionMatch = allText.match(/POS\/\d+/);
 
@@ -180,30 +197,42 @@ function renderDashboard(pageCount, products, allText, name) {
   els.totalSales.textContent = `${moneyFormatter.format(totalSales)} ر.س`;
   els.totalQty.textContent = numberFormatter.format(totalQty);
   els.productCount.textContent = numberFormatter.format(products.length);
+  els.avgUnit.textContent = totalQty ? `${moneyFormatter.format(avgUnit)} ر.س` : "-";
+  els.topQty.textContent = topQtyProduct ? numberFormatter.format(topQtyProduct.qty) : "-";
   els.reportMeta.textContent = [dateMatch?.[0], sessionMatch?.[0]].filter(Boolean).join(" · ") || name;
 
-  els.insights.innerHTML = "";
-  [
-    `تم استخراج ${numberFormatter.format(products.length)} بند مبيعات من ${numberFormatter.format(pageCount)} صفحات.`,
+  renderInsights({ pageCount, products, totalSales, totalQty, avgUnit, topProduct, topQtyProduct });
+  renderChart(products);
+  renderFocusCards(products);
+  renderPriceBands(products);
+  renderTable(products);
+}
+
+function renderInsights({ pageCount, products, totalSales, totalQty, avgUnit, topProduct, topQtyProduct }) {
+  const valueShare = topProduct && totalSales ? (topProduct.amount / totalSales) * 100 : 0;
+  const qtyShare = topQtyProduct && totalQty ? (topQtyProduct.qty / totalQty) * 100 : 0;
+  const messages = [
+    `تم استخراج ${numberFormatter.format(products.length)} بند مبيعات من ${numberFormatter.format(pageCount)} صفحات، مع إجمالي كمية ${numberFormatter.format(totalQty)} وحدة.`,
     topProduct
-      ? `أعلى بند قيمة هو ${topProduct.product} بإجمالي ${moneyFormatter.format(topProduct.amount)} ر.س.`
+      ? `أعلى بند قيمة هو ${topProduct.product} ويمثل تقريبًا ${numberFormatter.format(valueShare)}٪ من إجمالي المبيعات.`
       : "لم يتم العثور على بنود قابلة للتحليل داخل الملف.",
-    totalQty
-      ? `متوسط قيمة الوحدة التقريبي ${moneyFormatter.format(totalSales / totalQty)} ر.س.`
-      : "لا توجد كميات كافية لحساب متوسط الوحدة.",
-  ].forEach((text) => {
+    topQtyProduct
+      ? `أعلى بند في الحركة الكمية هو ${topQtyProduct.product} بعدد ${numberFormatter.format(topQtyProduct.qty)} وحدة، بنسبة ${numberFormatter.format(qtyShare)}٪ من الكمية.`
+      : "لا توجد كميات كافية لحساب أعلى بند كمية.",
+    avgUnit ? `متوسط قيمة الوحدة التقريبي ${moneyFormatter.format(avgUnit)} ر.س، ويمكن استخدامه لمراقبة تغيرات التسعير بين التقارير.` : "لا توجد كميات كافية لحساب متوسط الوحدة.",
+  ];
+
+  els.insights.innerHTML = "";
+  for (const text of messages) {
     const item = document.createElement("div");
     item.className = "insight";
     item.textContent = text;
     els.insights.appendChild(item);
-  });
-
-  renderChart(products);
-  renderTable(products);
+  }
 }
 
 function renderChart(products) {
-  const top = [...products].sort((a, b) => b.amount - a.amount).slice(0, 7);
+  const top = [...products].sort((a, b) => b.amount - a.amount).slice(0, 8);
   const max = top[0]?.amount || 1;
   els.barChart.innerHTML = "";
 
@@ -217,12 +246,64 @@ function renderChart(products) {
     item.className = "bar-row";
     item.innerHTML = `
       <div>
-        <div class="bar-label" title="${row.product}">${row.product}</div>
-        <div class="bar-track"><div class="bar-fill" style="width:${Math.max(4, (row.amount / max) * 100)}%"></div></div>
+        <div class="bar-label" title="${escapeHtml(row.product)}">${escapeHtml(row.product)}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.max(5, (row.amount / max) * 100)}%"></div></div>
       </div>
       <div class="bar-value">${moneyFormatter.format(row.amount)}</div>
     `;
     els.barChart.appendChild(item);
+  }
+}
+
+function renderFocusCards(products) {
+  const byValue = [...products].sort((a, b) => b.amount - a.amount)[0];
+  const byQty = [...products].sort((a, b) => b.qty - a.qty)[0];
+  const byUnit = [...products].sort((a, b) => b.unitPrice - a.unitPrice)[0];
+  const cards = [
+    byValue && { label: "أعلى قيمة مبيعات", title: byValue.product, value: `${moneyFormatter.format(byValue.amount)} ر.س` },
+    byQty && { label: "أعلى حركة كمية", title: byQty.product, value: `${numberFormatter.format(byQty.qty)} وحدة` },
+    byUnit && { label: "أعلى سعر وحدة", title: byUnit.product, value: `${moneyFormatter.format(byUnit.unitPrice)} ر.س` },
+  ].filter(Boolean);
+
+  els.focusCards.innerHTML = "";
+  if (!cards.length) {
+    els.focusCards.innerHTML = "<div class='focus-card'>لا توجد بيانات كافية.</div>";
+    return;
+  }
+
+  for (const card of cards) {
+    const item = document.createElement("div");
+    item.className = "focus-card";
+    item.innerHTML = `
+      <span>${card.label}</span>
+      <strong>${escapeHtml(card.title)}</strong>
+      <p>${card.value}</p>
+    `;
+    els.focusCards.appendChild(item);
+  }
+}
+
+function renderPriceBands(products) {
+  const bands = [
+    { label: "أقل من 100 ر.س", test: (row) => row.amount < 100 },
+    { label: "100 إلى 300 ر.س", test: (row) => row.amount >= 100 && row.amount < 300 },
+    { label: "300 ر.س فأكثر", test: (row) => row.amount >= 300 },
+  ].map((band) => ({
+    ...band,
+    count: products.filter(band.test).length,
+  }));
+  const max = Math.max(...bands.map((band) => band.count), 1);
+
+  els.priceBands.innerHTML = "";
+  for (const band of bands) {
+    const item = document.createElement("div");
+    item.className = "band";
+    item.innerHTML = `
+      <span>${band.label}</span>
+      <strong>${numberFormatter.format(band.count)} منتج</strong>
+      <div class="band-meter"><i style="width:${Math.max(4, (band.count / max) * 100)}%"></i></div>
+    `;
+    els.priceBands.appendChild(item);
   }
 }
 
@@ -235,20 +316,22 @@ function renderTable(products) {
 
   els.productsBody.innerHTML = "";
   if (!filtered.length) {
-    els.productsBody.innerHTML = "<tr><td colspan='4'>لا توجد نتائج مطابقة.</td></tr>";
+    els.productsBody.innerHTML = "<tr><td colspan='6'>لا توجد نتائج مطابقة.</td></tr>";
     return;
   }
 
-  for (const row of filtered) {
+  filtered.forEach((row, index) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${row.product}</td>
-      <td>${row.barcode || "-"}</td>
+      <td>${index + 1}</td>
+      <td>${escapeHtml(row.product)}</td>
+      <td>${escapeHtml(row.barcode || "-")}</td>
       <td>${numberFormatter.format(row.qty)}</td>
+      <td>${moneyFormatter.format(row.unitPrice)} ر.س</td>
       <td>${moneyFormatter.format(row.amount)} ر.س</td>
     `;
     els.productsBody.appendChild(tr);
-  }
+  });
 }
 
 els.input.addEventListener("change", async (event) => {
@@ -257,8 +340,7 @@ els.input.addEventListener("change", async (event) => {
 
   try {
     const bytes = await file.arrayBuffer();
-    const previewUrl = URL.createObjectURL(file);
-    await analyzePdf({ data: bytes }, file.name, previewUrl);
+    await analyzePdf({ data: bytes }, file.name);
   } catch (error) {
     console.error(error);
     setStatus("تعذر تحليل الملف. تأكد أن الملف PDF نصي وليس صورة ممسوحة فقط.", "error");
@@ -272,7 +354,7 @@ async function boot() {
     const response = await fetch(encodeURI(defaultPdfName));
     if (!response.ok) throw new Error("Default PDF not found");
     const bytes = await response.arrayBuffer();
-    await analyzePdf({ data: bytes }, defaultPdfName, encodeURI(defaultPdfName));
+    await analyzePdf({ data: bytes }, defaultPdfName);
   } catch (error) {
     console.warn(error);
     setStatus("ارفع ملف PDF للبدء. المتصفح منع تحميل الملف الافتراضي مباشرة.", "ready");
