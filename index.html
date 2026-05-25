@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>لوحة تحليل تقارير المبيعات PDF</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="topbar">
+        <div>
+          <p class="eyebrow">تحليل ملفات PDF</p>
+          <h1>لوحة مبيعات يومية</h1>
+        </div>
+        <label class="upload-button" for="pdfInput">
+          <span aria-hidden="true">↑</span>
+          رفع ملف PDF
+        </label>
+        <input id="pdfInput" type="file" accept="application/pdf" />
+      </section>
+
+      <section class="workspace">
+        <aside class="panel control-panel">
+          <div class="file-card">
+            <span class="file-icon">PDF</span>
+            <div>
+              <p class="muted">الملف الحالي</p>
+              <strong id="fileName">تفاصيل المبيعات (3).pdf</strong>
+            </div>
+          </div>
+
+          <div class="status-block">
+            <span id="statusDot" class="status-dot"></span>
+            <p id="statusText">جاهز لتحليل التقرير الموجود في مجلد المشروع.</p>
+          </div>
+
+          <div class="metric-stack">
+            <article class="metric">
+              <span>عدد الصفحات</span>
+              <strong id="pageCount">-</strong>
+            </article>
+            <article class="metric">
+              <span>إجمالي المبيعات</span>
+              <strong id="totalSales">-</strong>
+            </article>
+            <article class="metric">
+              <span>إجمالي الكمية</span>
+              <strong id="totalQty">-</strong>
+            </article>
+            <article class="metric">
+              <span>عدد المنتجات</span>
+              <strong id="productCount">-</strong>
+            </article>
+          </div>
+        </aside>
+
+        <section class="dashboard">
+          <div class="summary-grid">
+            <article class="panel chart-panel">
+              <div class="panel-heading">
+                <h2>أعلى المنتجات قيمة</h2>
+                <span id="chartHint">حسب الإجمالي بدون ضريبة</span>
+              </div>
+              <div id="barChart" class="bar-chart"></div>
+            </article>
+
+            <article class="panel insights-panel">
+              <div class="panel-heading">
+                <h2>قراءة سريعة</h2>
+                <span id="reportMeta">-</span>
+              </div>
+              <div id="insights" class="insights"></div>
+            </article>
+          </div>
+
+          <article class="panel table-panel">
+            <div class="panel-heading">
+              <h2>تفاصيل المنتجات</h2>
+              <input id="searchInput" type="search" placeholder="بحث باسم المنتج أو الباركود" />
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>المنتج</th>
+                    <th>الباركود</th>
+                    <th>الكمية</th>
+                    <th>الإجمالي</th>
+                  </tr>
+                </thead>
+                <tbody id="productsBody">
+                  <tr>
+                    <td colspan="4">سيظهر التحليل هنا بعد قراءة الملف.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <section class="panel preview-panel">
+          <div class="panel-heading">
+            <h2>معاينة التقرير</h2>
+            <span id="previewLabel">الصفحة الأولى</span>
+          </div>
+          <div id="pdfPreview" class="pdf-preview" aria-label="معاينة الصفحة الأولى من ملف PDF"></div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
