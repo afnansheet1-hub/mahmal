@@ -18,6 +18,8 @@ const els = {
   insights: document.querySelector("#insights"),
   focusCards: document.querySelector("#focusCards"),
   priceBands: document.querySelector("#priceBands"),
+  dailyExtract: document.querySelector("#dailyExtract"),
+  copyExtract: document.querySelector("#copyExtract"),
   barChart: document.querySelector("#barChart"),
   productsBody: document.querySelector("#productsBody"),
   search: document.querySelector("#searchInput"),
@@ -32,8 +34,13 @@ const moneyFormatter = new Intl.NumberFormat("ar-SA", {
 const numberFormatter = new Intl.NumberFormat("ar-SA", {
   maximumFractionDigits: 1,
 });
+const extractNumberFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 2,
+});
 
 let allProducts = [];
+let allExtractProducts = [];
+let currentExtractText = "";
 
 function setStatus(text, type = "ready") {
   els.statusText.textContent = text;
@@ -135,7 +142,6 @@ function rowFromLine(line) {
 function mergeContinuationRows(rows) {
   return rows
     .filter((row) => row.barcode)
-    .filter((row) => row.amount > 0)
     .filter((row) => !/^Perfume$/i.test(row.product))
     .map((row) => ({
       ...row,
@@ -166,7 +172,8 @@ async function analyzePdf(source, name) {
     }
   }
 
-  allProducts = mergeContinuationRows(rows);
+  allExtractProducts = mergeContinuationRows(rows);
+  allProducts = allExtractProducts.filter((row) => row.amount > 0);
   renderDashboard(pdf.numPages, allProducts, pageTexts.join(" "), name);
   setStatus("تم تحليل التقرير بنجاح. الواجهة تعرض الآن مؤشرات تفصيلية قابلة للبحث والمراجعة.", "ready");
 }
@@ -205,7 +212,93 @@ function renderDashboard(pageCount, products, allText, name) {
   renderChart(products);
   renderFocusCards(products);
   renderPriceBands(products);
+  renderDailyExtract({ products, countProducts: allExtractProducts, totalSales, totalQty, date: dateMatch?.[0] });
   renderTable(products);
+}
+
+function formatPlainMoney(value) {
+  return extractNumberFormatter.format(value).replace(/\.(\d+)$/, ",$1");
+}
+
+function formatPlainNumber(value) {
+  return extractNumberFormatter.format(value).replace(/\.(\d+)$/, ",$1");
+}
+
+function normalizeName(value) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ");
+}
+
+function sumQtyByKeywords(products, keywords) {
+  return products
+    .filter((row) => {
+      const name = normalizeName(row.product);
+      return keywords.some((keyword) => name.includes(keyword));
+    })
+    .reduce((sum, row) => sum + row.qty, 0);
+}
+
+function sumAmountByKeywords(products, keywords) {
+  return products
+    .filter((row) => {
+      const name = normalizeName(row.product);
+      return keywords.some((keyword) => name.includes(keyword));
+    })
+    .reduce((sum, row) => sum + row.amount, 0);
+}
+
+function formatDateForExtract(dateText) {
+  if (!dateText) return "N/A";
+  const [year, month, day] = dateText.split("-");
+  return `${day} / ${month} / ${year}`;
+}
+
+function renderDailyExtract({ products, countProducts, totalSales, totalQty, date }) {
+  const at = products.length;
+  const adt = at ? totalSales / at : 0;
+  const upt = at ? totalQty / at : 0;
+  const pink = sumQtyByKeywords(countProducts, ["pink", "pinko"]);
+  const muskCollection = sumQtyByKeywords(countProducts, ["musk collection"]);
+  const discoveryBlack = sumQtyByKeywords(countProducts, ["discovery black"]);
+  const winterCollection = sumQtyByKeywords(countProducts, ["winter collection"]);
+  const magicLayering = sumQtyByKeywords(countProducts, ["magic", "layering"]);
+  const d5Box = sumQtyByKeywords(countProducts, ["d5"]);
+  const tawziat = sumQtyByKeywords(countProducts, ["tawziat", "towziyat", "tawziyat"]);
+  const mmtBundle = sumQtyByKeywords(countProducts, ["mmt"]);
+  const makeupSales = sumAmountByKeywords(countProducts, ["makeup", "make up"]);
+  const tawziyatBoxSolo = sumQtyByKeywords(countProducts, ["tawziyat box", "tawziat box", "towziyat"]);
+
+  currentExtractText = `● ALMAHMAL ●
+
+${formatDateForExtract(date)}
+
+- Sales : ${formatPlainMoney(totalSales)}
+- ADT : ${formatPlainNumber(adt)}
+- AT : ${formatPlainNumber(at)}
+- UPT : ${formatPlainNumber(upt)}
+- Cash : N/A
+------------------
+- Pinkoctober :${formatPlainNumber(pink)}
+- Musk collection :${formatPlainNumber(muskCollection)}
+- Bundle (P+M) :${formatPlainNumber(Math.min(pink, muskCollection))}
+------------------
+- Discovery Black :${formatPlainNumber(discoveryBlack)}
+- Winter collection :${formatPlainNumber(winterCollection)}
+- Bundle ( D + W) :${formatPlainNumber(Math.min(discoveryBlack, winterCollection))}
+------------------
+- Magic of Layering : ${formatPlainNumber(magicLayering)}
+- D5 Box :${formatPlainNumber(d5Box)}
+- Bundle(M+D) : ${formatPlainNumber(Math.min(magicLayering, d5Box))}
+------------------
+- Tawziat collection :${formatPlainNumber(tawziat)}
+- MMT Bundle : ${formatPlainNumber(mmtBundle)}
+------------------
+- MAKEUP SALES  : ${makeupSales ? formatPlainMoney(makeupSales) : "0"}
+Tawziyat Box solo : ${formatPlainNumber(tawziyatBoxSolo)}
+------------------
+- Jahez sales  : N/A
+- ADT :N/A`;
+
+  els.dailyExtract.textContent = currentExtractText;
 }
 
 function renderInsights({ pageCount, products, totalSales, totalQty, avgUnit, topProduct, topQtyProduct }) {
@@ -348,6 +441,25 @@ els.input.addEventListener("change", async (event) => {
 });
 
 els.search.addEventListener("input", () => renderTable(allProducts));
+
+document.querySelectorAll(".tab-button").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".tab-button").forEach((item) => item.classList.remove("active"));
+    document.querySelectorAll(".app-view").forEach((view) => view.classList.remove("active"));
+    button.classList.add("active");
+    document.querySelector(`#${button.dataset.view}`).classList.add("active");
+  });
+});
+
+els.copyExtract.addEventListener("click", async () => {
+  if (!currentExtractText) return;
+  await navigator.clipboard.writeText(currentExtractText);
+  const original = els.copyExtract.textContent;
+  els.copyExtract.textContent = "تم النسخ";
+  window.setTimeout(() => {
+    els.copyExtract.textContent = original;
+  }, 1400);
+});
 
 async function boot() {
   try {

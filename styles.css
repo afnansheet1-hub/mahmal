@@ -258,6 +258,52 @@ h2 {
   align-items: start;
 }
 
+.view-tabs {
+  display: inline-flex;
+  gap: 6px;
+  padding: 6px;
+  margin-bottom: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+}
+
+.tab-button,
+.copy-button {
+  min-height: 40px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0 16px;
+  color: #25312b;
+  background: transparent;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.tab-button.active,
+.copy-button {
+  border-color: var(--accent-strong);
+  background: var(--accent);
+  color: #fff;
+}
+
+.app-view {
+  display: none;
+}
+
+.app-view.active {
+  display: grid;
+}
+
+.extract-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+  gap: 18px;
+  align-items: start;
+}
+
 .dashboard {
   display: grid;
   gap: 18px;
@@ -345,6 +391,21 @@ h2 {
   background: rgba(255, 255, 255, 0.66);
   font-size: 13px;
   line-height: 1.75;
+}
+
+.daily-extract {
+  min-height: 640px;
+  margin: 0;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #101713;
+  direction: ltr;
+  text-align: left;
+  white-space: pre-wrap;
+  font: 700 18px/1.7 "Courier New", monospace;
+  overflow: auto;
 }
 
 .focus-card {
@@ -517,6 +578,7 @@ td:nth-child(6) {
 
 @media (max-width: 1120px) {
   .workspace,
+  .extract-layout,
   .hero {
     grid-template-columns: 1fr;
   }
@@ -546,6 +608,11 @@ td:nth-child(6) {
   .panel-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .view-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 
   .kpi-grid {

@@ -62,7 +62,12 @@
         </article>
       </section>
 
-      <section class="workspace">
+      <nav class="view-tabs" aria-label="تبويبات التقرير">
+        <button class="tab-button active" type="button" data-view="dashboardView">الداشبورد</button>
+        <button class="tab-button" type="button" data-view="extractView">المستخرج اليومي</button>
+      </nav>
+
+      <section id="dashboardView" class="workspace app-view active">
         <section class="dashboard">
           <div class="summary-grid">
             <article class="panel chart-panel">
@@ -149,6 +154,33 @@
           </div>
           <div id="pdfPreview" class="pdf-preview" aria-label="معاينة الصفحة الأولى من ملف PDF"></div>
         </section>
+      </section>
+
+      <section id="extractView" class="extract-layout app-view">
+        <article class="panel extract-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">صيغة جاهزة</p>
+              <h2>المستخرج اليومي</h2>
+            </div>
+            <button id="copyExtract" class="copy-button" type="button">نسخ النص</button>
+          </div>
+          <pre id="dailyExtract" class="daily-extract">سيظهر المستخرج هنا بعد تحليل ملف PDF.</pre>
+        </article>
+
+        <article class="panel extract-notes">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">تفاصيل الحساب</p>
+              <h2>ما الذي يتم استخراجه؟</h2>
+            </div>
+          </div>
+          <div class="insights">
+            <div class="insight">Sales من إجمالي بنود المبيعات المستخرجة من PDF.</div>
+            <div class="insight">AT هو عدد المنتجات/البنود المقروءة، وUPT هو متوسط الوحدات لكل بند.</div>
+            <div class="insight">Cash وJahez غير موجودة في التقرير الحالي، لذلك تظهر N/A إلى أن تتوفر في PDF.</div>
+          </div>
+        </article>
       </section>
     </main>
 
