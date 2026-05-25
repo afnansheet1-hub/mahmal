@@ -26,7 +26,7 @@ body {
   background:
     radial-gradient(circle at 14% 12%, rgba(15, 118, 110, 0.16), transparent 32%),
     linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(236, 241, 237, 0.82)),
-    url("./assets/match-logo-bg.webp") center 36px / min(560px, 74vw) auto no-repeat fixed,
+    url("./assets/match-logo-bg.webp") center 10px / min(1120px, 96vw) auto no-repeat fixed,
     var(--bg);
 }
 
@@ -36,9 +36,9 @@ body::before {
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(rgba(247, 249, 245, 0.56), rgba(247, 249, 245, 0.9)),
+    linear-gradient(rgba(247, 249, 245, 0.32), rgba(247, 249, 245, 0.82)),
     repeating-linear-gradient(135deg, rgba(15, 118, 110, 0.04) 0 1px, transparent 1px 18px);
-  backdrop-filter: blur(0.5px);
+  backdrop-filter: blur(0.2px);
 }
 
 .app-shell {
@@ -81,12 +81,12 @@ body::before {
 .hero-copy::before {
   content: "";
   position: absolute;
-  inset-inline-end: 24px;
-  top: 18px;
-  width: min(360px, 42vw);
-  height: 120px;
+  inset-inline-end: 28px;
+  top: 8px;
+  width: min(470px, 48vw);
+  height: 145px;
   background: url("./assets/match-logo-bg.webp") center / contain no-repeat;
-  opacity: 0.12;
+  opacity: 0.14;
   pointer-events: none;
 }
 
