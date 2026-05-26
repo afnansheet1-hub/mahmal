@@ -308,9 +308,6 @@ function productMatches(row, rule) {
 }
 
 function sumQtyByMappedProduct(products, key) {
-  if (Number.isFinite(mappedDailyQuantities[key]) && mappedDailyQuantities[key] > 0) {
-    return mappedDailyQuantities[key];
-  }
   const rule = dailyProductMap[key];
   return products
     .filter((row) => productMatches(row, rule))
