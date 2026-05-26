@@ -60,6 +60,7 @@ let aiPdfTotalQty = null;
 let aiOfferDiscountQty = null;
 let discountBundleCounts = {
   pinkMusk: null,
+  discoveryWinter: null,
 };
 let lastPdfSalesTotal = 0;
 let lastPdfQtyTotal = 0;
@@ -226,8 +227,8 @@ function renderDashboard(pageCount, products, allText, name) {
   const totalQty = products.reduce((sum, row) => sum + row.qty, 0);
   lastPdfSalesTotal = totalSales;
   lastPdfQtyTotal = totalQty;
-  const displaySales = sessionOrderSales || totalSales;
-  const avgUnit = totalQty ? displaySales / totalQty : 0;
+  const displaySales = sessionOrderSales;
+  const avgUnit = totalQty && displaySales ? displaySales / totalQty : 0;
   const sortedByValue = [...products].sort((a, b) => b.amount - a.amount);
   const sortedByQty = [...products].sort((a, b) => b.qty - a.qty);
   const topProduct = sortedByValue[0];
@@ -236,10 +237,10 @@ function renderDashboard(pageCount, products, allText, name) {
   const sessionMatch = allText.match(/POS\/\d+/);
 
   els.pageCount.textContent = numberFormatter.format(pageCount);
-  els.totalSales.textContent = `${moneyFormatter.format(displaySales)} ر.س`;
+  els.totalSales.textContent = displaySales ? `${moneyFormatter.format(displaySales)} ر.س` : "ارفع صورة الجلسة";
   els.totalQty.textContent = numberFormatter.format(totalQty);
   els.productCount.textContent = numberFormatter.format(products.length);
-  els.avgUnit.textContent = totalQty ? `${moneyFormatter.format(avgUnit)} ر.س` : "-";
+  els.avgUnit.textContent = avgUnit ? `${moneyFormatter.format(avgUnit)} ر.س` : "-";
   els.topQty.textContent = topQtyProduct ? numberFormatter.format(topQtyProduct.qty) : "-";
   els.reportMeta.textContent = [dateMatch?.[0], sessionMatch?.[0]].filter(Boolean).join(" · ") || name;
 
@@ -253,10 +254,12 @@ function renderDashboard(pageCount, products, allText, name) {
 }
 
 function updateDashboardSalesOverride() {
-  const displaySales = sessionOrderSales || lastPdfSalesTotal;
-  els.totalSales.textContent = `${moneyFormatter.format(displaySales)} ر.س`;
-  if (lastPdfQtyTotal) {
+  const displaySales = sessionOrderSales;
+  els.totalSales.textContent = displaySales ? `${moneyFormatter.format(displaySales)} ر.س` : "ارفع صورة الجلسة";
+  if (lastPdfQtyTotal && displaySales) {
     els.avgUnit.textContent = `${moneyFormatter.format(displaySales / lastPdfQtyTotal)} ر.س`;
+  } else {
+    els.avgUnit.textContent = "-";
   }
 }
 
@@ -378,6 +381,9 @@ function extractDiscountBundleCounts(text) {
     pinkMusk: rows
       .filter((row) => Math.abs(row.amount - 46.09) < 0.02)
       .reduce((sum, row) => sum + row.qty, 0),
+    discoveryWinter: rows
+      .filter((row) => Math.abs(row.amount - 78) < 0.02)
+      .reduce((sum, row) => sum + row.qty, 0),
   };
 }
 
@@ -387,12 +393,17 @@ function extractDiscountBundleCountsFromRows(rows) {
       .filter((row) => isOrderDiscountName(row.product))
       .filter((row) => Math.abs(Math.abs(row.amount) - 46.09) < 0.02 || Math.abs(Math.abs(row.amount / row.qty) - 46.09) < 0.02)
       .reduce((sum, row) => sum + row.qty, 0),
+    discoveryWinter: rows
+      .filter((row) => isOrderDiscountName(row.product))
+      .filter((row) => Math.abs(Math.abs(row.amount) - 78) < 0.02 || Math.abs(Math.abs(row.amount / row.qty) - 78) < 0.02)
+      .reduce((sum, row) => sum + row.qty, 0),
   };
 }
 
 function mergeDiscountBundleCounts(...counts) {
   return {
     pinkMusk: Math.max(...counts.map((count) => count.pinkMusk || 0)),
+    discoveryWinter: Math.max(...counts.map((count) => count.discoveryWinter || 0)),
   };
 }
 
@@ -405,7 +416,7 @@ function formatDateForExtract(dateText) {
 function renderDailyExtract({ products, countProducts, totalSales, totalQty, date }) {
   const fallbackAt = products.length;
   const orders = sessionOrderTotal;
-  const salesForAdt = sessionOrderSales || totalSales;
+  const salesForAdt = sessionOrderSales || 0;
   const adt = orders || fallbackAt;
   const at = adt ? salesForAdt / adt : 0;
   const offerDiscountQty = aiOfferDiscountQty ?? countProducts.filter(isOfferDiscount).reduce((sum, row) => sum + row.qty, 0);
@@ -417,6 +428,7 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const pinkMuskBundle = discountBundleCounts.pinkMusk ?? 0;
   const discoveryBlack = sumQtyByMappedProduct(countProducts, "discoveryBlack");
   const winterCollection = sumQtyByKeywords(countProducts, ["winter collection"]);
+  const discoveryWinterBundle = discountBundleCounts.discoveryWinter ?? 0;
   const magicLayering = sumQtyByKeywords(countProducts, ["magic", "layering"]);
   const d5Box = sumQtyByMappedProduct(countProducts, "d5Box");
   const tawziat = sumQtyByMappedProduct(countProducts, "tawziatCollection");
@@ -440,7 +452,7 @@ ${formatDateForExtract(date)}
 ------------------
 - Discovery Black :${formatPlainNumber(discoveryBlack)}
 - Winter collection :${formatPlainNumber(winterCollection)}
-- Bundle ( D + W) :${formatPlainNumber(Math.min(discoveryBlack, winterCollection))}
+- Bundle ( D + W) :${formatPlainNumber(discoveryWinterBundle)}
 ------------------
 - Magic of Layering : ${formatPlainNumber(magicLayering)}
 - D5 Box :${formatPlainNumber(d5Box)}
