@@ -52,6 +52,7 @@ let allProducts = [];
 let allExtractProducts = [];
 let currentExtractText = "";
 let currentExtractPayload = null;
+let mappedDailyQuantities = {};
 let sessionOrderTotal = null;
 let sessionOrderSales = null;
 let latestPdfText = "";
@@ -131,11 +132,11 @@ function groupItemsByLine(items) {
 function rowFromLine(line) {
   const text = line.text;
   const amount = parseAmount(text);
-  const qtyCandidates = line.items
-    .map((item) => parseQty(item.text))
-    .filter((value) => value !== null && value < 10000);
-  const qty = qtyCandidates.find((value) => !amount || Math.abs(value - amount) > 0.01) ?? null;
   const barcode = extractBarcode(text);
+  const qtyItems = line.items
+    .map((item) => ({ value: parseQty(item.text), x: item.x, text: item.text }))
+    .filter((item) => item.value !== null && item.value < 10000 && (!amount || Math.abs(item.value - amount) > 0.01));
+  const qty = (barcode ? qtyItems.at(-1)?.value : qtyItems[0]?.value) ?? null;
 
   if (amount === null || qty === null) {
     return null;
@@ -193,6 +194,7 @@ async function analyzePdf(source, name) {
   allProducts = allExtractProducts.filter((row) => row.amount > 0);
   aiPdfTotalQty = null;
   aiOfferDiscountQty = null;
+  mappedDailyQuantities = extractMappedDailyQuantities(latestPdfText);
   renderDashboard(pdf.numPages, allProducts, latestPdfText, name);
   setStatus("تم تحليل التقرير بنجاح. الواجهة تعرض الآن مؤشرات تفصيلية قابلة للبحث والمراجعة.", "ready");
 }
@@ -306,10 +308,29 @@ function productMatches(row, rule) {
 }
 
 function sumQtyByMappedProduct(products, key) {
+  if (Number.isFinite(mappedDailyQuantities[key]) && mappedDailyQuantities[key] > 0) {
+    return mappedDailyQuantities[key];
+  }
   const rule = dailyProductMap[key];
   return products
     .filter((row) => productMatches(row, rule))
     .reduce((sum, row) => sum + row.qty, 0);
+}
+
+function extractMappedDailyQuantities(text) {
+  const quantities = {};
+  for (const [key, rule] of Object.entries(dailyProductMap)) {
+    quantities[key] = 0;
+    for (const barcode of rule.barcodes) {
+      const escaped = barcode.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const pattern = new RegExp(`${escaped}[\\s\\S]{0,180}?(\\d+(?:\\.\\d+)?)\\s*\\n?\\s*تاﺪﺣﻮﻟا`, "g");
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        quantities[key] += Number(match[1]);
+      }
+    }
+  }
+  return quantities;
 }
 
 function formatDateForExtract(dateText) {
