@@ -376,7 +376,7 @@ function extractJsonObject(text) {
 }
 
 async function analyzePdfWithOpenRouter() {
-  const apiKey = els.openRouterKey.value.trim();
+  const apiKey = els.openRouterKey.value.trim() || window.OPENROUTER_API_KEY || "";
   if (!apiKey) {
     els.aiStatus.textContent = "أدخل OpenRouter API Key في الخانة أولًا. لن يتم حفظه في الموقع.";
     return;
@@ -697,3 +697,8 @@ async function boot() {
 }
 
 boot();
+
+if (window.OPENROUTER_API_KEY) {
+  els.openRouterKey.value = window.OPENROUTER_API_KEY;
+  els.aiStatus.textContent = "تم تحميل مفتاح OpenRouter من الملف المحلي.";
+}
