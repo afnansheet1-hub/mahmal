@@ -382,7 +382,7 @@ function extractDiscountBundleCounts(text) {
       .filter((row) => Math.abs(row.amount - 46.09) < 0.02)
       .reduce((sum, row) => sum + row.qty, 0),
     discoveryWinter: rows
-      .filter((row) => Math.abs(row.amount - 78) < 0.02)
+      .filter((row) => Math.abs(row.amount - 67.83) < 0.02)
       .reduce((sum, row) => sum + row.qty, 0),
   };
 }
@@ -395,7 +395,7 @@ function extractDiscountBundleCountsFromRows(rows) {
       .reduce((sum, row) => sum + row.qty, 0),
     discoveryWinter: rows
       .filter((row) => isOrderDiscountName(row.product))
-      .filter((row) => Math.abs(Math.abs(row.amount) - 78) < 0.02 || Math.abs(Math.abs(row.amount / row.qty) - 78) < 0.02)
+      .filter((row) => Math.abs(Math.abs(row.amount) - 67.83) < 0.02 || Math.abs(Math.abs(row.amount / row.qty) - 67.83) < 0.02)
       .reduce((sum, row) => sum + row.qty, 0),
   };
 }
