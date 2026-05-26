@@ -25,6 +25,11 @@ const els = {
   ordersInput: document.querySelector("#ordersInput"),
   orderSalesInput: document.querySelector("#orderSalesInput"),
   ocrStatus: document.querySelector("#ocrStatus"),
+  openRouterKey: document.querySelector("#openRouterKey"),
+  openRouterModel: document.querySelector("#openRouterModel"),
+  refreshFreeModels: document.querySelector("#refreshFreeModels"),
+  aiAnalyzePdf: document.querySelector("#aiAnalyzePdf"),
+  aiStatus: document.querySelector("#aiStatus"),
   barChart: document.querySelector("#barChart"),
   productsBody: document.querySelector("#productsBody"),
   search: document.querySelector("#searchInput"),
@@ -49,6 +54,9 @@ let currentExtractText = "";
 let currentExtractPayload = null;
 let sessionOrderTotal = null;
 let sessionOrderSales = null;
+let latestPdfText = "";
+let aiPdfTotalQty = null;
+let aiOfferDiscountQty = null;
 
 function setStatus(text, type = "ready") {
   els.statusText.textContent = text;
@@ -73,8 +81,8 @@ function cleanText(value) {
 }
 
 function parseAmount(value) {
-  const match = value.replace(/[﷼]/g, "").match(/[\d,]+\.\d{2}/);
-  return match ? Number(match[0].replace(/,/g, "")) : null;
+  const match = value.replace(/[﷼]/g, "").match(/-?\s*[\d,]+\.\d{2}/);
+  return match ? Number(match[0].replace(/\s|,/g, "")) : null;
 }
 
 function parseQty(value) {
@@ -180,9 +188,12 @@ async function analyzePdf(source, name) {
     }
   }
 
+  latestPdfText = pageTexts.join("\n");
   allExtractProducts = mergeContinuationRows(rows);
   allProducts = allExtractProducts.filter((row) => row.amount > 0);
-  renderDashboard(pdf.numPages, allProducts, pageTexts.join(" "), name);
+  aiPdfTotalQty = null;
+  aiOfferDiscountQty = null;
+  renderDashboard(pdf.numPages, allProducts, latestPdfText, name);
   setStatus("تم تحليل التقرير بنجاح. الواجهة تعرض الآن مؤشرات تفصيلية قابلة للبحث والمراجعة.", "ready");
 }
 
@@ -241,6 +252,16 @@ function normalizeName(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ");
 }
 
+function isOfferDiscount(row) {
+  const name = normalizeName(row.product);
+  return row.amount < 0 && (
+    name.includes("on your order") ||
+    name.includes("per point") ||
+    name.includes("order 100") ||
+    name.includes("discount")
+  );
+}
+
 function sumQtyByKeywords(products, keywords) {
   return products
     .filter((row) => {
@@ -269,9 +290,12 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const fallbackAt = products.length;
   const orders = sessionOrderTotal;
   const salesForAdt = sessionOrderSales || totalSales;
-  const adt = orders ? salesForAdt / orders : fallbackAt ? totalSales / fallbackAt : 0;
-  const at = orders && adt ? orders / adt : fallbackAt;
-  const upt = orders ? totalQty / orders : at ? totalQty / at : 0;
+  const adt = orders || fallbackAt;
+  const at = adt ? salesForAdt / adt : 0;
+  const offerDiscountQty = aiOfferDiscountQty ?? countProducts.filter(isOfferDiscount).reduce((sum, row) => sum + row.qty, 0);
+  const pdfQuantityTotal = aiPdfTotalQty ?? totalQty;
+  const uptBaseQty = Math.max(0, pdfQuantityTotal - offerDiscountQty);
+  const upt = orders ? uptBaseQty / orders : adt ? totalQty / adt : 0;
   const pink = sumQtyByKeywords(countProducts, ["pink", "pinko"]);
   const muskCollection = sumQtyByKeywords(countProducts, ["musk collection"]);
   const discoveryBlack = sumQtyByKeywords(countProducts, ["discovery black"]);
@@ -315,6 +339,97 @@ Tawziyat Box solo : ${formatPlainNumber(tawziyatBoxSolo)}
 - ADT :N/A`;
 
   els.dailyExtract.textContent = currentExtractText;
+}
+
+async function refreshOpenRouterModels() {
+  els.aiStatus.textContent = "جاري جلب الموديلات المجانية من OpenRouter...";
+  const response = await fetch("https://openrouter.ai/api/v1/models");
+  if (!response.ok) throw new Error("Could not load OpenRouter models");
+  const data = await response.json();
+  const freeModels = (data.data || [])
+    .filter((model) => {
+      const prompt = Number(model.pricing?.prompt ?? 1);
+      const completion = Number(model.pricing?.completion ?? 1);
+      return model.id?.includes(":free") || (prompt === 0 && completion === 0);
+    })
+    .slice(0, 30);
+
+  if (!freeModels.length) {
+    els.aiStatus.textContent = "لم يتم العثور على موديلات مجانية تلقائيًا. استخدم القائمة الحالية.";
+    return;
+  }
+
+  els.openRouterModel.innerHTML = "";
+  for (const model of freeModels) {
+    const option = document.createElement("option");
+    option.value = model.id;
+    option.textContent = model.id;
+    els.openRouterModel.appendChild(option);
+  }
+  els.aiStatus.textContent = `تم تحميل ${freeModels.length} موديل مجاني.`;
+}
+
+function extractJsonObject(text) {
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error("No JSON object returned");
+  return JSON.parse(match[0]);
+}
+
+async function analyzePdfWithOpenRouter() {
+  const apiKey = els.openRouterKey.value.trim();
+  if (!apiKey) {
+    els.aiStatus.textContent = "أدخل OpenRouter API Key في الخانة أولًا. لن يتم حفظه في الموقع.";
+    return;
+  }
+  if (!latestPdfText) {
+    els.aiStatus.textContent = "حلل ملف PDF أولًا قبل استخدام OpenRouter.";
+    return;
+  }
+
+  els.aiStatus.textContent = "جاري تحليل نص PDF عبر OpenRouter...";
+  const prompt = `You are analyzing a POS daily sales PDF text. Return ONLY JSON with:
+{
+  "pdf_total_quantity": number,
+  "offer_discount_quantity": number,
+  "notes": string
+}
+
+Rules:
+- pdf_total_quantity is the grand total quantity shown in the PDF totals row if present.
+- offer_discount_quantity is the sum of quantities for discount/offer rows only, such as "on your order 100%" or "per point on your order".
+- Do not include returns in offer_discount_quantity.
+- If the PDF total quantity is not explicit, estimate from item quantities and explain in notes.
+
+PDF text:
+${latestPdfText.slice(0, 45000)}`;
+
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": window.location.origin,
+      "X-Title": "Mahmal PDF Sales Dashboard",
+    },
+    body: JSON.stringify({
+      model: els.openRouterModel.value,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content || "";
+  const parsed = extractJsonObject(content);
+  aiPdfTotalQty = Number(parsed.pdf_total_quantity) > 0 ? Number(parsed.pdf_total_quantity) : null;
+  aiOfferDiscountQty = Number(parsed.offer_discount_quantity) >= 0 ? Number(parsed.offer_discount_quantity) : null;
+  if (currentExtractPayload) renderDailyExtract(currentExtractPayload);
+  els.aiStatus.textContent = `تم تحديث الكمية: الإجمالي ${formatPlainNumber(aiPdfTotalQty ?? 0)}، خصم العروض ${formatPlainNumber(aiOfferDiscountQty ?? 0)}. ${parsed.notes || ""}`;
 }
 
 function parseOrderTotalFromOcr(text) {
@@ -515,6 +630,24 @@ els.ordersInput.addEventListener("input", () => {
 
 els.orderSalesInput.addEventListener("input", () => {
   updateOrderSales(els.orderSalesInput.value);
+});
+
+els.refreshFreeModels.addEventListener("click", async () => {
+  try {
+    await refreshOpenRouterModels();
+  } catch (error) {
+    console.error(error);
+    els.aiStatus.textContent = "تعذر جلب الموديلات المجانية. تأكد من الاتصال واستخدم القائمة الحالية.";
+  }
+});
+
+els.aiAnalyzePdf.addEventListener("click", async () => {
+  try {
+    await analyzePdfWithOpenRouter();
+  } catch (error) {
+    console.error(error);
+    els.aiStatus.textContent = "تعذر تحليل PDF عبر OpenRouter. تأكد من المفتاح والموديل.";
+  }
 });
 
 els.sessionImageInput.addEventListener("change", async (event) => {

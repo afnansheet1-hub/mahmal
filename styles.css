@@ -290,6 +290,12 @@ h2 {
   color: #fff;
 }
 
+.copy-button.secondary {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--accent-strong);
+}
+
 .image-upload-button {
   display: inline-flex;
   align-items: center;
@@ -456,6 +462,32 @@ h2 {
   color: var(--ink);
   direction: ltr;
   font: 800 15px Tahoma, Arial, sans-serif;
+}
+
+.orders-field select {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--ink);
+  font: 800 13px Tahoma, Arial, sans-serif;
+}
+
+.ai-config {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.ai-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 .ocr-status {
