@@ -280,6 +280,38 @@ function sumAmountByKeywords(products, keywords) {
     .reduce((sum, row) => sum + row.amount, 0);
 }
 
+const dailyProductMap = {
+  discoveryBlack: {
+    barcodes: ["6287020284793"],
+    names: ["match collection match discovery set d4"],
+  },
+  tawziatCollection: {
+    barcodes: ["6287020286155"],
+    names: ["match towziyat box pack 20 ml 10 in 1"],
+  },
+  muskCollection: {
+    barcodes: ["6287020284809"],
+    names: ["match musk collection 20ml 9in1"],
+  },
+  d5Box: {
+    barcodes: ["6287020285042"],
+    names: ["match collection match discovery set ramadan d5"],
+  },
+};
+
+function productMatches(row, rule) {
+  if (rule.barcodes.includes(row.barcode)) return true;
+  const name = normalizeName(row.product);
+  return rule.names.some((target) => name.includes(normalizeName(target)));
+}
+
+function sumQtyByMappedProduct(products, key) {
+  const rule = dailyProductMap[key];
+  return products
+    .filter((row) => productMatches(row, rule))
+    .reduce((sum, row) => sum + row.qty, 0);
+}
+
 function formatDateForExtract(dateText) {
   if (!dateText) return "N/A";
   const [year, month, day] = dateText.split("-");
@@ -297,12 +329,12 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const uptBaseQty = Math.max(0, pdfQuantityTotal - offerDiscountQty);
   const upt = orders ? uptBaseQty / orders : adt ? totalQty / adt : 0;
   const pink = sumQtyByKeywords(countProducts, ["pink", "pinko"]);
-  const muskCollection = sumQtyByKeywords(countProducts, ["musk collection"]);
-  const discoveryBlack = sumQtyByKeywords(countProducts, ["discovery black"]);
+  const muskCollection = sumQtyByMappedProduct(countProducts, "muskCollection");
+  const discoveryBlack = sumQtyByMappedProduct(countProducts, "discoveryBlack");
   const winterCollection = sumQtyByKeywords(countProducts, ["winter collection"]);
   const magicLayering = sumQtyByKeywords(countProducts, ["magic", "layering"]);
-  const d5Box = sumQtyByKeywords(countProducts, ["d5"]);
-  const tawziat = sumQtyByKeywords(countProducts, ["tawziat", "towziyat", "tawziyat"]);
+  const d5Box = sumQtyByMappedProduct(countProducts, "d5Box");
+  const tawziat = sumQtyByMappedProduct(countProducts, "tawziatCollection");
   const mmtBundle = sumQtyByKeywords(countProducts, ["mmt"]);
   const makeupSales = sumAmountByKeywords(countProducts, ["makeup", "make up"]);
   const tawziyatBoxSolo = sumQtyByKeywords(countProducts, ["tawziyat box", "tawziat box", "towziyat"]);
