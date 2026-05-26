@@ -290,6 +290,29 @@ h2 {
   color: #fff;
 }
 
+.image-upload-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--accent-strong);
+  border-radius: 8px;
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--accent-strong);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+#sessionImageInput {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .app-view {
   display: none;
 }
@@ -406,6 +429,55 @@ h2 {
   white-space: pre-wrap;
   font: 700 18px/1.7 "Courier New", monospace;
   overflow: auto;
+}
+
+.session-upload {
+  display: grid;
+  grid-template-columns: auto minmax(170px, 240px) minmax(220px, 1fr);
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+
+.orders-field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.orders-field input {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--ink);
+  direction: ltr;
+  font: 800 15px Tahoma, Arial, sans-serif;
+}
+
+.ocr-status {
+  align-self: center;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.session-preview {
+  display: none;
+  width: 100%;
+  max-height: 230px;
+  object-fit: contain;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.session-preview.visible {
+  display: block;
 }
 
 .focus-card {
@@ -605,9 +677,14 @@ td:nth-child(6) {
   }
 
   .hero-actions,
-  .panel-heading {
+  .panel-heading,
+  .session-upload {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .session-upload {
+    grid-template-columns: 1fr;
   }
 
   .view-tabs {

@@ -20,6 +20,10 @@ const els = {
   priceBands: document.querySelector("#priceBands"),
   dailyExtract: document.querySelector("#dailyExtract"),
   copyExtract: document.querySelector("#copyExtract"),
+  sessionImageInput: document.querySelector("#sessionImageInput"),
+  sessionImagePreview: document.querySelector("#sessionImagePreview"),
+  ordersInput: document.querySelector("#ordersInput"),
+  ocrStatus: document.querySelector("#ocrStatus"),
   barChart: document.querySelector("#barChart"),
   productsBody: document.querySelector("#productsBody"),
   search: document.querySelector("#searchInput"),
@@ -41,6 +45,8 @@ const extractNumberFormatter = new Intl.NumberFormat("en-US", {
 let allProducts = [];
 let allExtractProducts = [];
 let currentExtractText = "";
+let currentExtractPayload = null;
+let sessionOrderTotal = null;
 
 function setStatus(text, type = "ready") {
   els.statusText.textContent = text;
@@ -212,7 +218,8 @@ function renderDashboard(pageCount, products, allText, name) {
   renderChart(products);
   renderFocusCards(products);
   renderPriceBands(products);
-  renderDailyExtract({ products, countProducts: allExtractProducts, totalSales, totalQty, date: dateMatch?.[0] });
+  currentExtractPayload = { products, countProducts: allExtractProducts, totalSales, totalQty, date: dateMatch?.[0] };
+  renderDailyExtract(currentExtractPayload);
   renderTable(products);
 }
 
@@ -222,6 +229,10 @@ function formatPlainMoney(value) {
 
 function formatPlainNumber(value) {
   return extractNumberFormatter.format(value).replace(/\.(\d+)$/, ",$1");
+}
+
+function formatPlainInteger(value) {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
 }
 
 function normalizeName(value) {
@@ -253,9 +264,11 @@ function formatDateForExtract(dateText) {
 }
 
 function renderDailyExtract({ products, countProducts, totalSales, totalQty, date }) {
-  const at = products.length;
-  const adt = at ? totalSales / at : 0;
-  const upt = at ? totalQty / at : 0;
+  const fallbackAt = products.length;
+  const orders = sessionOrderTotal;
+  const adt = orders ? totalSales / orders : fallbackAt ? totalSales / fallbackAt : 0;
+  const at = orders && adt ? orders / adt : fallbackAt;
+  const upt = orders ? totalQty / orders : at ? totalQty / at : 0;
   const pink = sumQtyByKeywords(countProducts, ["pink", "pinko"]);
   const muskCollection = sumQtyByKeywords(countProducts, ["musk collection"]);
   const discoveryBlack = sumQtyByKeywords(countProducts, ["discovery black"]);
@@ -299,6 +312,52 @@ Tawziyat Box solo : ${formatPlainNumber(tawziyatBoxSolo)}
 - ADT :N/A`;
 
   els.dailyExtract.textContent = currentExtractText;
+}
+
+function parseOrderTotalFromOcr(text) {
+  const normalized = text.replace(/[٠-٩]/g, (digit) => "٠١٢٣٤٥٦٧٨٩".indexOf(digit));
+  const labelMatch = normalized.match(/(?:orders?|order|الطلبات|طلبات)\D{0,24}(\d{1,5})|(\d{1,5})\D{0,24}(?:orders?|order|الطلبات|طلبات)/i);
+  if (labelMatch) return Number(labelMatch[1] || labelMatch[2]);
+
+  const integers = [...normalized.matchAll(/(?<![.,])\b\d{1,5}\b(?![.,]\d)/g)]
+    .map((match) => Number(match[0]))
+    .filter((value) => value > 0 && value < 10000);
+  if (!integers.length) return null;
+
+  const likelySmallCounts = integers.filter((value) => value <= 500);
+  return likelySmallCounts.at(-1) ?? integers.at(-1);
+}
+
+function updateOrders(value) {
+  sessionOrderTotal = Number(value) > 0 ? Number(value) : null;
+  if (currentExtractPayload) renderDailyExtract(currentExtractPayload);
+}
+
+async function recognizeSessionImage(file) {
+  els.ocrStatus.textContent = "جاري قراءة الصورة واستخراج إجمالي الطلبات...";
+  const { createWorker } = await import("./vendor/tesseract.esm.min.js");
+  const worker = await createWorker("eng", 1, {
+    workerPath: "./vendor/tesseract-worker.min.js",
+    logger: (message) => {
+      if (message.status === "recognizing text") {
+        els.ocrStatus.textContent = `جاري قراءة الصورة... ${Math.round((message.progress || 0) * 100)}%`;
+      }
+    },
+  });
+
+  try {
+    const result = await worker.recognize(file);
+    const orders = parseOrderTotalFromOcr(result.data.text);
+    if (orders) {
+      els.ordersInput.value = orders;
+      updateOrders(orders);
+      els.ocrStatus.textContent = `تم استخراج إجمالي الطلبات: ${formatPlainInteger(orders)}. يمكنك تعديل الرقم إذا احتجت.`;
+    } else {
+      els.ocrStatus.textContent = "لم أتمكن من تحديد إجمالي الطلبات تلقائيًا. أدخل الرقم يدويًا من أعلى الصورة.";
+    }
+  } finally {
+    await worker.terminate();
+  }
 }
 
 function renderInsights({ pageCount, products, totalSales, totalQty, avgUnit, topProduct, topQtyProduct }) {
@@ -441,6 +500,25 @@ els.input.addEventListener("change", async (event) => {
 });
 
 els.search.addEventListener("input", () => renderTable(allProducts));
+
+els.ordersInput.addEventListener("input", () => {
+  updateOrders(els.ordersInput.value);
+});
+
+els.sessionImageInput.addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  els.sessionImagePreview.src = URL.createObjectURL(file);
+  els.sessionImagePreview.classList.add("visible");
+
+  try {
+    await recognizeSessionImage(file);
+  } catch (error) {
+    console.error(error);
+    els.ocrStatus.textContent = "تعذرت قراءة الصورة تلقائيًا. أدخل إجمالي الطلبات يدويًا من أعلى الصورة.";
+  }
+});
 
 document.querySelectorAll(".tab-button").forEach((button) => {
   button.addEventListener("click", () => {

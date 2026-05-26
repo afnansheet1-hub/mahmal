@@ -165,6 +165,19 @@
             </div>
             <button id="copyExtract" class="copy-button" type="button">نسخ النص</button>
           </div>
+          <div class="session-upload">
+            <label class="image-upload-button" for="sessionImageInput">
+              <span aria-hidden="true">↑</span>
+              رفع صورة إغلاق الجلسة
+            </label>
+            <input id="sessionImageInput" type="file" accept="image/*" />
+            <label class="orders-field">
+              <span>إجمالي الطلبات</span>
+              <input id="ordersInput" type="number" min="0" step="1" placeholder="مثال: 52" />
+            </label>
+            <p id="ocrStatus" class="ocr-status">ارفع صورة الجلسة لاستخراج عدد الطلبات من أعلى الصورة.</p>
+          </div>
+          <img id="sessionImagePreview" class="session-preview" alt="معاينة صورة إغلاق الجلسة" />
           <pre id="dailyExtract" class="daily-extract">سيظهر المستخرج هنا بعد تحليل ملف PDF.</pre>
         </article>
 
@@ -177,7 +190,7 @@
           </div>
           <div class="insights">
             <div class="insight">Sales من إجمالي بنود المبيعات المستخرجة من PDF.</div>
-            <div class="insight">AT هو عدد المنتجات/البنود المقروءة، وUPT هو متوسط الوحدات لكل بند.</div>
+            <div class="insight">بعد رفع صورة إغلاق الجلسة: ADT = Sales ÷ إجمالي الطلبات، و AT = إجمالي الطلبات ÷ ADT.</div>
             <div class="insight">Cash وJahez غير موجودة في التقرير الحالي، لذلك تظهر N/A إلى أن تتوفر في PDF.</div>
           </div>
         </article>
