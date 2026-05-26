@@ -299,6 +299,10 @@ const dailyProductMap = {
     barcodes: ["6287020285042"],
     names: ["match collection match discovery set ramadan d5"],
   },
+  tawziyatBoxSolo: {
+    barcodes: ["6287020286926"],
+    names: ["tawziyat box solo"],
+  },
 };
 
 function productMatches(row, rule) {
@@ -355,7 +359,7 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const tawziat = sumQtyByMappedProduct(countProducts, "tawziatCollection");
   const mmtBundle = sumQtyByKeywords(countProducts, ["mmt"]);
   const makeupSales = sumAmountByKeywords(countProducts, ["makeup", "make up"]);
-  const tawziyatBoxSolo = sumQtyByKeywords(countProducts, ["tawziyat box", "tawziat box", "towziyat"]);
+  const tawziyatBoxSolo = sumQtyByMappedProduct(countProducts, "tawziyatBoxSolo");
 
   currentExtractText = `● ALMAHMAL ●
 
