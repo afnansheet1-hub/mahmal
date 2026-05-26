@@ -23,6 +23,7 @@ const els = {
   sessionImageInput: document.querySelector("#sessionImageInput"),
   sessionImagePreview: document.querySelector("#sessionImagePreview"),
   ordersInput: document.querySelector("#ordersInput"),
+  orderSalesInput: document.querySelector("#orderSalesInput"),
   ocrStatus: document.querySelector("#ocrStatus"),
   barChart: document.querySelector("#barChart"),
   productsBody: document.querySelector("#productsBody"),
@@ -47,6 +48,7 @@ let allExtractProducts = [];
 let currentExtractText = "";
 let currentExtractPayload = null;
 let sessionOrderTotal = null;
+let sessionOrderSales = null;
 
 function setStatus(text, type = "ready") {
   els.statusText.textContent = text;
@@ -266,7 +268,8 @@ function formatDateForExtract(dateText) {
 function renderDailyExtract({ products, countProducts, totalSales, totalQty, date }) {
   const fallbackAt = products.length;
   const orders = sessionOrderTotal;
-  const adt = orders ? totalSales / orders : fallbackAt ? totalSales / fallbackAt : 0;
+  const salesForAdt = sessionOrderSales || totalSales;
+  const adt = orders ? salesForAdt / orders : fallbackAt ? totalSales / fallbackAt : 0;
   const at = orders && adt ? orders / adt : fallbackAt;
   const upt = orders ? totalQty / orders : at ? totalQty / at : 0;
   const pink = sumQtyByKeywords(countProducts, ["pink", "pinko"]);
@@ -284,7 +287,7 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
 
 ${formatDateForExtract(date)}
 
-- Sales : ${formatPlainMoney(totalSales)}
+- Sales : ${formatPlainMoney(salesForAdt)}
 - ADT : ${formatPlainNumber(adt)}
 - AT : ${formatPlainNumber(at)}
 - UPT : ${formatPlainNumber(upt)}
@@ -333,6 +336,11 @@ function updateOrders(value) {
   if (currentExtractPayload) renderDailyExtract(currentExtractPayload);
 }
 
+function updateOrderSales(value) {
+  sessionOrderSales = Number(value) > 0 ? Number(value) : null;
+  if (currentExtractPayload) renderDailyExtract(currentExtractPayload);
+}
+
 async function recognizeSessionImage(file) {
   els.ocrStatus.textContent = "جاري قراءة الصورة واستخراج إجمالي الطلبات...";
   const { createWorker } = await import("./vendor/tesseract.esm.min.js");
@@ -351,9 +359,9 @@ async function recognizeSessionImage(file) {
     if (orders) {
       els.ordersInput.value = orders;
       updateOrders(orders);
-      els.ocrStatus.textContent = `تم استخراج إجمالي الطلبات: ${formatPlainInteger(orders)}. يمكنك تعديل الرقم إذا احتجت.`;
+      els.ocrStatus.textContent = `تم استخراج عدد الطلبات: ${formatPlainInteger(orders)}. أدخل Sales الطلبات يدويًا من الصورة.`;
     } else {
-      els.ocrStatus.textContent = "لم أتمكن من تحديد إجمالي الطلبات تلقائيًا. أدخل الرقم يدويًا من أعلى الصورة.";
+      els.ocrStatus.textContent = "لم أتمكن من تحديد عدد الطلبات تلقائيًا. أدخل عدد الطلبات وSales يدويًا من أعلى الصورة.";
     }
   } finally {
     await worker.terminate();
@@ -505,6 +513,10 @@ els.ordersInput.addEventListener("input", () => {
   updateOrders(els.ordersInput.value);
 });
 
+els.orderSalesInput.addEventListener("input", () => {
+  updateOrderSales(els.orderSalesInput.value);
+});
+
 els.sessionImageInput.addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -516,7 +528,7 @@ els.sessionImageInput.addEventListener("change", async (event) => {
     await recognizeSessionImage(file);
   } catch (error) {
     console.error(error);
-    els.ocrStatus.textContent = "تعذرت قراءة الصورة تلقائيًا. أدخل إجمالي الطلبات يدويًا من أعلى الصورة.";
+    els.ocrStatus.textContent = "تعذرت قراءة الصورة تلقائيًا. أدخل عدد الطلبات وSales يدويًا من أعلى الصورة.";
   }
 });
 
