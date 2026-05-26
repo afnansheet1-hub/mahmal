@@ -61,6 +61,8 @@ let aiOfferDiscountQty = null;
 let discountBundleCounts = {
   pinkMusk: null,
 };
+let lastPdfSalesTotal = 0;
+let lastPdfQtyTotal = 0;
 
 function setStatus(text, type = "ready") {
   els.statusText.textContent = text;
@@ -222,7 +224,10 @@ async function renderPreview(pdf) {
 function renderDashboard(pageCount, products, allText, name) {
   const totalSales = products.reduce((sum, row) => sum + row.amount, 0);
   const totalQty = products.reduce((sum, row) => sum + row.qty, 0);
-  const avgUnit = totalQty ? totalSales / totalQty : 0;
+  lastPdfSalesTotal = totalSales;
+  lastPdfQtyTotal = totalQty;
+  const displaySales = sessionOrderSales || totalSales;
+  const avgUnit = totalQty ? displaySales / totalQty : 0;
   const sortedByValue = [...products].sort((a, b) => b.amount - a.amount);
   const sortedByQty = [...products].sort((a, b) => b.qty - a.qty);
   const topProduct = sortedByValue[0];
@@ -231,7 +236,7 @@ function renderDashboard(pageCount, products, allText, name) {
   const sessionMatch = allText.match(/POS\/\d+/);
 
   els.pageCount.textContent = numberFormatter.format(pageCount);
-  els.totalSales.textContent = `${moneyFormatter.format(totalSales)} ر.س`;
+  els.totalSales.textContent = `${moneyFormatter.format(displaySales)} ر.س`;
   els.totalQty.textContent = numberFormatter.format(totalQty);
   els.productCount.textContent = numberFormatter.format(products.length);
   els.avgUnit.textContent = totalQty ? `${moneyFormatter.format(avgUnit)} ر.س` : "-";
@@ -245,6 +250,14 @@ function renderDashboard(pageCount, products, allText, name) {
   currentExtractPayload = { products, countProducts: allExtractProducts, totalSales, totalQty, date: dateMatch?.[0] };
   renderDailyExtract(currentExtractPayload);
   renderTable(products);
+}
+
+function updateDashboardSalesOverride() {
+  const displaySales = sessionOrderSales || lastPdfSalesTotal;
+  els.totalSales.textContent = `${moneyFormatter.format(displaySales)} ر.س`;
+  if (lastPdfQtyTotal) {
+    els.avgUnit.textContent = `${moneyFormatter.format(displaySales / lastPdfQtyTotal)} ر.س`;
+  }
 }
 
 function formatPlainMoney(value) {
@@ -550,6 +563,18 @@ function parseOrderTotalFromOcr(text) {
   return likelySmallCounts.at(-1) ?? integers.at(-1);
 }
 
+function parseOrderSalesFromOcr(text) {
+  const normalized = text
+    .replace(/[٠-٩]/g, (digit) => "٠١٢٣٤٥٦٧٨٩".indexOf(digit))
+    .replace(/٫/g, ".")
+    .replace(/٬/g, ",");
+  const moneyValues = [...normalized.matchAll(/\b\d{1,3}(?:,\d{3})*(?:\.\d{2})\b|\b\d{4,}(?:\.\d{2})\b/g)]
+    .map((match) => Number(match[0].replace(/,/g, "")))
+    .filter((value) => value > 0);
+  if (!moneyValues.length) return null;
+  return Math.max(...moneyValues);
+}
+
 function updateOrders(value) {
   sessionOrderTotal = Number(value) > 0 ? Number(value) : null;
   if (currentExtractPayload) renderDailyExtract(currentExtractPayload);
@@ -557,6 +582,7 @@ function updateOrders(value) {
 
 function updateOrderSales(value) {
   sessionOrderSales = Number(value) > 0 ? Number(value) : null;
+  updateDashboardSalesOverride();
   if (currentExtractPayload) renderDailyExtract(currentExtractPayload);
 }
 
@@ -575,10 +601,20 @@ async function recognizeSessionImage(file) {
   try {
     const result = await worker.recognize(file);
     const orders = parseOrderTotalFromOcr(result.data.text);
+    const sales = parseOrderSalesFromOcr(result.data.text);
     if (orders) {
       els.ordersInput.value = orders;
       updateOrders(orders);
-      els.ocrStatus.textContent = `تم استخراج عدد الطلبات: ${formatPlainInteger(orders)}. أدخل Sales الطلبات يدويًا من الصورة.`;
+    }
+    if (sales) {
+      els.orderSalesInput.value = sales.toFixed(2);
+      updateOrderSales(sales);
+    }
+    if (orders || sales) {
+      const parts = [];
+      if (orders) parts.push(`عدد الطلبات: ${formatPlainInteger(orders)}`);
+      if (sales) parts.push(`Sales: ${formatPlainMoney(sales)}`);
+      els.ocrStatus.textContent = `تم استخراج ${parts.join("، ")}. يمكنك تعديل القيم إذا احتجت.`;
     } else {
       els.ocrStatus.textContent = "لم أتمكن من تحديد عدد الطلبات تلقائيًا. أدخل عدد الطلبات وSales يدويًا من أعلى الصورة.";
     }
