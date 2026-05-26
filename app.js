@@ -58,6 +58,9 @@ let sessionOrderSales = null;
 let latestPdfText = "";
 let aiPdfTotalQty = null;
 let aiOfferDiscountQty = null;
+let discountBundleCounts = {
+  pinkMusk: null,
+};
 
 function setStatus(text, type = "ready") {
   els.statusText.textContent = text;
@@ -177,10 +180,12 @@ async function analyzePdf(source, name) {
   await renderPreview(pdf);
   const rows = [];
   const pageTexts = [];
+  const rawPageTexts = [];
 
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber);
     const content = await page.getTextContent();
+    rawPageTexts.push(content.items.map((item) => item.str).join("\n"));
     const lines = groupItemsByLine(content.items);
     pageTexts.push(lines.map((line) => line.text).join(" "));
     for (const line of lines) {
@@ -194,6 +199,10 @@ async function analyzePdf(source, name) {
   allProducts = allExtractProducts.filter((row) => row.amount > 0);
   aiPdfTotalQty = null;
   aiOfferDiscountQty = null;
+  discountBundleCounts = mergeDiscountBundleCounts(
+    extractDiscountBundleCounts(rawPageTexts.join("\n")),
+    extractDiscountBundleCountsFromRows(rows),
+  );
   mappedDailyQuantities = extractMappedDailyQuantities(latestPdfText);
   renderDashboard(pdf.numPages, allProducts, latestPdfText, name);
   setStatus("تم تحليل التقرير بنجاح. الواجهة تعرض الآن مؤشرات تفصيلية قابلة للبحث والمراجعة.", "ready");
@@ -258,10 +267,16 @@ function isOfferDiscount(row) {
   const name = normalizeName(row.product);
   return row.amount < 0 && (
     name.includes("on your order") ||
+    name.includes("order your on") ||
     name.includes("per point") ||
     name.includes("order 100") ||
     name.includes("discount")
   );
+}
+
+function isOrderDiscountName(product) {
+  const name = normalizeName(product);
+  return name.includes("on your order") || name.includes("order your on");
 }
 
 function sumQtyByKeywords(products, keywords) {
@@ -334,6 +349,40 @@ function extractMappedDailyQuantities(text) {
   return quantities;
 }
 
+function extractDiscountBundleCounts(text) {
+  const rows = [];
+  const normalized = text.replace(/\u200b/g, " ");
+  const productFirst = /on\s+your\s+order\s+100%[\s\S]{0,80}?(\d+(?:\.\d+)?)\s*تاﺪﺣﻮﻟا[\s\S]{0,80}?-\s*([\d,]+\.\d{2})/g;
+  const amountFirst = /-\s*([\d,]+\.\d{2})[\s\S]{0,80}?(\d+(?:\.\d+)?)\s*تاﺪﺣﻮﻟا[\s\S]{0,80}?on\s+your\s+order\s+100%/g;
+  let match;
+  while ((match = productFirst.exec(normalized)) !== null) {
+    rows.push({ qty: Number(match[1]), amount: Number(match[2].replace(/,/g, "")) });
+  }
+  while ((match = amountFirst.exec(normalized)) !== null) {
+    rows.push({ qty: Number(match[2]), amount: Number(match[1].replace(/,/g, "")) });
+  }
+  return {
+    pinkMusk: rows
+      .filter((row) => Math.abs(row.amount - 46.09) < 0.02)
+      .reduce((sum, row) => sum + row.qty, 0),
+  };
+}
+
+function extractDiscountBundleCountsFromRows(rows) {
+  return {
+    pinkMusk: rows
+      .filter((row) => isOrderDiscountName(row.product))
+      .filter((row) => Math.abs(Math.abs(row.amount) - 46.09) < 0.02 || Math.abs(Math.abs(row.amount / row.qty) - 46.09) < 0.02)
+      .reduce((sum, row) => sum + row.qty, 0),
+  };
+}
+
+function mergeDiscountBundleCounts(...counts) {
+  return {
+    pinkMusk: Math.max(...counts.map((count) => count.pinkMusk || 0)),
+  };
+}
+
 function formatDateForExtract(dateText) {
   if (!dateText) return "N/A";
   const [year, month, day] = dateText.split("-");
@@ -352,6 +401,7 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const upt = orders ? uptBaseQty / orders : adt ? totalQty / adt : 0;
   const pink = sumQtyByKeywords(countProducts, ["pink", "pinko"]);
   const muskCollection = sumQtyByMappedProduct(countProducts, "muskCollection");
+  const pinkMuskBundle = discountBundleCounts.pinkMusk ?? 0;
   const discoveryBlack = sumQtyByMappedProduct(countProducts, "discoveryBlack");
   const winterCollection = sumQtyByKeywords(countProducts, ["winter collection"]);
   const magicLayering = sumQtyByKeywords(countProducts, ["magic", "layering"]);
@@ -373,7 +423,7 @@ ${formatDateForExtract(date)}
 ------------------
 - Pinkoctober :${formatPlainNumber(pink)}
 - Musk collection :${formatPlainNumber(muskCollection)}
-- Bundle (P+M) :${formatPlainNumber(Math.min(pink, muskCollection))}
+- Bundle (P+M) :${formatPlainNumber(pinkMuskBundle)}
 ------------------
 - Discovery Black :${formatPlainNumber(discoveryBlack)}
 - Winter collection :${formatPlainNumber(winterCollection)}
