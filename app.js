@@ -434,7 +434,7 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const at = adt ? salesForAdt / adt : 0;
   const pdfQuantityTotal = aiPdfTotalQty ?? totalQty;
   const uptBaseQty = Math.max(0, pdfQuantityTotal - offerDiscountQuantityTotal);
-  const upt = at ? uptBaseQty / at : 0;
+  const upt = adt ? uptBaseQty / adt : 0;
   const pink = sumQtyByKeywords(countProducts, ["pink", "pinko"]);
   const muskCollection = sumQtyByMappedProduct(countProducts, "muskCollection");
   const pinkMuskBundle = discountBundleCounts.pinkMusk ?? 0;
