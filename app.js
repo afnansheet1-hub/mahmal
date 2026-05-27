@@ -385,7 +385,7 @@ function extractDiscountBundleCounts(text) {
       .filter((row) => Math.abs(row.amount - 67.83) < 0.02)
       .reduce((sum, row) => sum + row.qty, 0),
     mmt: rows
-      .filter((row) => Math.abs(row.amount - 100.01) < 0.02)
+      .filter((row) => Math.abs(row.amount - 100.01) < 0.02 || Math.abs(row.amount / row.qty - 100.01) < 0.02)
       .reduce((sum, row) => sum + row.qty, 0),
   };
 }
