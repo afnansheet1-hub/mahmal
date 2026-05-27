@@ -62,10 +62,32 @@ let offerDiscountQuantityTotal = 0;
 let pdfGrandQuantityTotal = null;
 let lastPdfSalesTotal = 0;
 let lastPdfQtyTotal = 0;
+let hasReport = false;
 
 function setStatus(text, type = "ready") {
   els.statusText.textContent = text;
   els.statusDot.className = `status-dot ${type === "ready" ? "" : type}`;
+}
+
+function resetEmptyState() {
+  hasReport = false;
+  document.body.classList.remove("has-report");
+  els.fileName.textContent = "لم يتم تحميل ملف";
+  els.reportMeta.textContent = "بانتظار التقرير";
+  els.pageCount.textContent = "-";
+  els.totalSales.textContent = "-";
+  els.totalQty.textContent = "-";
+  els.productCount.textContent = "-";
+  els.avgUnit.textContent = "-";
+  els.topQty.textContent = "-";
+  els.insights.innerHTML = "";
+  els.focusCards.innerHTML = "";
+  els.priceBands.innerHTML = "";
+  els.barChart.innerHTML = "";
+  els.preview.replaceChildren();
+  els.productsBody.innerHTML = "<tr><td colspan='6'>ارفع ملف PDF لعرض المنتجات.</td></tr>";
+  els.dailyExtract.textContent = "سيظهر المستخرج هنا بعد تحميل ملف PDF.";
+  setStatus("ارفع ملف PDF لبدء التحليل وعرض القيم.", "ready");
 }
 
 function escapeHtml(value) {
@@ -189,6 +211,8 @@ function extractPdfGrandQuantityTotal(rows) {
 }
 
 async function analyzePdf(source, name) {
+  hasReport = false;
+  document.body.classList.remove("has-report");
   setStatus("جاري قراءة الصفحات واستخراج جدول المبيعات والمؤشرات التفصيلية...", "loading");
   els.fileName.textContent = name;
   els.previewLabel.textContent = "الصفحة الأولى";
@@ -227,6 +251,8 @@ async function analyzePdf(source, name) {
   );
   mappedDailyQuantities = extractMappedDailyQuantities(latestPdfText);
   renderDashboard(pdf.numPages, allProducts, latestPdfText, name);
+  hasReport = true;
+  document.body.classList.add("has-report");
   setStatus("تم تحليل التقرير بنجاح. الواجهة تعرض الآن مؤشرات تفصيلية قابلة للبحث والمراجعة.", "ready");
 }
 
@@ -273,6 +299,7 @@ function renderDashboard(pageCount, products, allText, name) {
 }
 
 function updateDashboardSalesOverride() {
+  if (!hasReport) return;
   const displaySales = sessionOrderSales;
   els.totalSales.textContent = displaySales ? `${moneyFormatter.format(displaySales)} ر.س` : "ارفع صورة الجلسة";
   if (lastPdfQtyTotal && displaySales) {
@@ -761,15 +788,7 @@ els.copyExtract.addEventListener("click", async () => {
 });
 
 async function boot() {
-  try {
-    const response = await fetch(encodeURI(defaultPdfName));
-    if (!response.ok) throw new Error("Default PDF not found");
-    const bytes = await response.arrayBuffer();
-    await analyzePdf({ data: bytes }, defaultPdfName);
-  } catch (error) {
-    console.warn(error);
-    setStatus("ارفع ملف PDF للبدء. المتصفح منع تحميل الملف الافتراضي مباشرة.", "ready");
-  }
+  resetEmptyState();
 }
 
 boot();

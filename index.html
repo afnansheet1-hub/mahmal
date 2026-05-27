@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>لوحة تحليل تقارير المبيعات PDF</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20260528-1" />
   </head>
   <body>
     <main class="app-shell">
@@ -13,12 +13,12 @@
           <p class="eyebrow">MATCH SALES INTELLIGENCE</p>
           <h1>داشبورد متجر ماتش</h1>
           <p class="hero-subtitle">
-            تحليل تقارير المبيعات اليومية من PDF مع قراءة المنتجات، الكميات، القيم، وأفضل البنود أداء.
+            مساحة عمل يومية لقراءة تقرير PDF، تحويله إلى مؤشرات واضحة، وتجهيز المستخرج اليومي بدون ضجيج.
           </p>
           <div class="hero-actions">
             <label class="upload-button" for="pdfInput">
               <span aria-hidden="true">↑</span>
-              رفع ملف PDF
+              اختيار ملف PDF
             </label>
             <input id="pdfInput" type="file" accept="application/pdf" />
             <span id="reportMeta" class="report-pill">بانتظار التقرير</span>
@@ -27,10 +27,10 @@
 
         <div class="hero-card">
           <span class="hero-label">الملف الحالي</span>
-          <strong id="fileName">تفاصيل المبيعات (3).pdf</strong>
+          <strong id="fileName">لم يتم تحميل ملف</strong>
           <div class="status-block">
             <span id="statusDot" class="status-dot"></span>
-            <p id="statusText">جاهز لتحليل التقرير الموجود في مجلد المشروع.</p>
+            <p id="statusText">ارفع ملف PDF لبدء التحليل وعرض القيم.</p>
           </div>
         </div>
       </section>
@@ -66,6 +66,18 @@
         <button class="tab-button active" type="button" data-view="dashboardView">الداشبورد</button>
         <button class="tab-button" type="button" data-view="extractView">المستخرج اليومي</button>
       </nav>
+
+      <section class="empty-state" aria-label="حالة البداية">
+        <div class="empty-card">
+          <span class="empty-mark">PDF</span>
+          <h2>ابدأ برفع تقرير المبيعات</h2>
+          <p>بعد تحميل الملف ستظهر المؤشرات، الجدول، معاينة PDF، والمستخرج اليومي هنا تلقائيًا.</p>
+          <label class="upload-button" for="pdfInput">
+            <span aria-hidden="true">↑</span>
+            اختيار ملف PDF
+          </label>
+        </div>
+      </section>
 
       <section id="dashboardView" class="workspace app-view active">
         <section class="dashboard">
@@ -202,6 +214,6 @@
       </section>
     </main>
 
-    <script type="module" src="./app.js?v=20260528-6"></script>
+    <script type="module" src="./app.js?v=20260528-7"></script>
   </body>
 </html>
