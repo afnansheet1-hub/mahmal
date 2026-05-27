@@ -281,10 +281,12 @@ function normalizeName(value) {
 
 function isOfferDiscount(row) {
   const name = normalizeName(row.product);
-  return row.amount < 0 && (
+  return (
     name.includes("on your order") ||
     name.includes("order your on") ||
     name.includes("per point") ||
+    name.includes("point per") ||
+    name.includes("per order") ||
     name.includes("order 100") ||
     name.includes("discount")
   );
