@@ -433,8 +433,8 @@ h2 {
 
 .session-upload {
   display: grid;
-  grid-template-columns: auto minmax(140px, 190px) minmax(160px, 210px) minmax(220px, 1fr);
-  gap: 10px;
+  grid-template-columns: minmax(180px, 220px) minmax(180px, 1fr) minmax(210px, 1fr);
+  gap: 12px;
   align-items: end;
   margin-bottom: 12px;
 }
@@ -459,10 +459,12 @@ h2 {
 }
 
 .ocr-status {
-  align-self: center;
+  grid-column: 1 / -1;
+  align-self: start;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.6;
+  margin-top: 0;
 }
 
 .session-preview {
@@ -661,6 +663,20 @@ td:nth-child(6) {
 
   .pdf-preview {
     height: 760px;
+  }
+
+  .session-upload {
+    grid-template-columns: minmax(180px, 220px) minmax(180px, 1fr) minmax(210px, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .session-upload {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .image-upload-button {
+    grid-column: 1 / -1;
   }
 }
 
