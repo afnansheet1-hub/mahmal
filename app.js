@@ -20,11 +20,8 @@ const els = {
   priceBands: document.querySelector("#priceBands"),
   dailyExtract: document.querySelector("#dailyExtract"),
   copyExtract: document.querySelector("#copyExtract"),
-  sessionImageInput: document.querySelector("#sessionImageInput"),
-  sessionImagePreview: document.querySelector("#sessionImagePreview"),
   ordersInput: document.querySelector("#ordersInput"),
   orderSalesInput: document.querySelector("#orderSalesInput"),
-  ocrStatus: document.querySelector("#ocrStatus"),
   barChart: document.querySelector("#barChart"),
   productsBody: document.querySelector("#productsBody"),
   search: document.querySelector("#searchInput"),
@@ -317,10 +314,6 @@ function formatPlainNumber(value) {
   return extractNumberFormatter.format(value).replace(/\.(\d+)$/, ",$1");
 }
 
-function formatPlainInteger(value) {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
-}
-
 function normalizeName(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ");
 }
@@ -530,32 +523,6 @@ Tawziyat Box solo : ${formatPlainNumber(tawziyatBoxSolo)}
   els.dailyExtract.textContent = currentExtractText;
 }
 
-function parseOrderTotalFromOcr(text) {
-  const normalized = text.replace(/[٠-٩]/g, (digit) => "٠١٢٣٤٥٦٧٨٩".indexOf(digit));
-  const labelMatch = normalized.match(/(?:orders?|order|الطلبات|طلبات)\D{0,24}(\d{1,5})|(\d{1,5})\D{0,24}(?:orders?|order|الطلبات|طلبات)/i);
-  if (labelMatch) return Number(labelMatch[1] || labelMatch[2]);
-
-  const integers = [...normalized.matchAll(/(?<![.,])\b\d{1,5}\b(?![.,]\d)/g)]
-    .map((match) => Number(match[0]))
-    .filter((value) => value > 0 && value < 10000);
-  if (!integers.length) return null;
-
-  const likelySmallCounts = integers.filter((value) => value <= 500);
-  return likelySmallCounts.at(-1) ?? integers.at(-1);
-}
-
-function parseOrderSalesFromOcr(text) {
-  const normalized = text
-    .replace(/[٠-٩]/g, (digit) => "٠١٢٣٤٥٦٧٨٩".indexOf(digit))
-    .replace(/٫/g, ".")
-    .replace(/٬/g, ",");
-  const moneyValues = [...normalized.matchAll(/\b\d{1,3}(?:,\d{3})*(?:\.\d{2})\b|\b\d{4,}(?:\.\d{2})\b/g)]
-    .map((match) => Number(match[0].replace(/,/g, "")))
-    .filter((value) => value > 0);
-  if (!moneyValues.length) return null;
-  return Math.max(...moneyValues);
-}
-
 function updateOrders(value) {
   sessionOrderTotal = Number(value) > 0 ? Number(value) : null;
   if (currentExtractPayload) renderDailyExtract(currentExtractPayload);
@@ -565,43 +532,6 @@ function updateOrderSales(value) {
   sessionOrderSales = Number(value) > 0 ? Number(value) : null;
   updateDashboardSalesOverride();
   if (currentExtractPayload) renderDailyExtract(currentExtractPayload);
-}
-
-async function recognizeSessionImage(file) {
-  els.ocrStatus.textContent = "جاري قراءة الصورة واستخراج إجمالي الطلبات...";
-  const { createWorker } = await import("./vendor/tesseract.esm.min.js");
-  const worker = await createWorker("eng", 1, {
-    workerPath: "./vendor/tesseract-worker.min.js",
-    logger: (message) => {
-      if (message.status === "recognizing text") {
-        els.ocrStatus.textContent = `جاري قراءة الصورة... ${Math.round((message.progress || 0) * 100)}%`;
-      }
-    },
-  });
-
-  try {
-    const result = await worker.recognize(file);
-    const orders = parseOrderTotalFromOcr(result.data.text);
-    const sales = parseOrderSalesFromOcr(result.data.text);
-    if (orders) {
-      els.ordersInput.value = orders;
-      updateOrders(orders);
-    }
-    if (sales) {
-      els.orderSalesInput.value = sales.toFixed(2);
-      updateOrderSales(sales);
-    }
-    if (orders || sales) {
-      const parts = [];
-      if (orders) parts.push(`عدد الطلبات: ${formatPlainInteger(orders)}`);
-      if (sales) parts.push(`Sales: ${formatPlainMoney(sales)}`);
-      els.ocrStatus.textContent = `تم استخراج ${parts.join("، ")}. يمكنك تعديل القيم إذا احتجت.`;
-    } else {
-      els.ocrStatus.textContent = "لم أتمكن من تحديد عدد الطلبات تلقائيًا. أدخل عدد الطلبات وSales يدويًا من أعلى الصورة.";
-    }
-  } finally {
-    await worker.terminate();
-  }
 }
 
 function renderInsights({ pageCount, products, totalSales, totalQty, avgUnit, topProduct, topQtyProduct }) {
@@ -751,21 +681,6 @@ els.ordersInput.addEventListener("input", () => {
 
 els.orderSalesInput.addEventListener("input", () => {
   updateOrderSales(els.orderSalesInput.value);
-});
-
-els.sessionImageInput.addEventListener("change", async (event) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-
-  els.sessionImagePreview.src = URL.createObjectURL(file);
-  els.sessionImagePreview.classList.add("visible");
-
-  try {
-    await recognizeSessionImage(file);
-  } catch (error) {
-    console.error(error);
-    els.ocrStatus.textContent = "تعذرت قراءة الصورة تلقائيًا. أدخل عدد الطلبات وSales يدويًا من أعلى الصورة.";
-  }
 });
 
 document.querySelectorAll(".tab-button").forEach((button) => {

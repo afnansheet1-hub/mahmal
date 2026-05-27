@@ -290,29 +290,6 @@ h2 {
   color: #fff;
 }
 
-.image-upload-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 42px;
-  padding: 0 14px;
-  border: 1px solid var(--accent-strong);
-  border-radius: 8px;
-  background: rgba(15, 118, 110, 0.1);
-  color: var(--accent-strong);
-  font-weight: 800;
-  cursor: pointer;
-}
-
-#sessionImageInput {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
-
 .app-view {
   display: none;
 }
@@ -433,7 +410,7 @@ h2 {
 
 .session-upload {
   display: grid;
-  grid-template-columns: minmax(180px, 220px) minmax(180px, 1fr) minmax(210px, 1fr);
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
   gap: 12px;
   align-items: end;
   margin-bottom: 12px;
@@ -458,28 +435,13 @@ h2 {
   font: 800 15px Tahoma, Arial, sans-serif;
 }
 
-.ocr-status {
+.manual-status {
   grid-column: 1 / -1;
   align-self: start;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.6;
   margin-top: 0;
-}
-
-.session-preview {
-  display: none;
-  width: 100%;
-  max-height: 230px;
-  object-fit: contain;
-  margin-bottom: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.session-preview.visible {
-  display: block;
 }
 
 .focus-card {
@@ -666,17 +628,13 @@ td:nth-child(6) {
   }
 
   .session-upload {
-    grid-template-columns: minmax(180px, 220px) minmax(180px, 1fr) minmax(210px, 1fr);
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
   }
 }
 
 @media (max-width: 900px) {
   .session-upload {
     grid-template-columns: 1fr 1fr;
-  }
-
-  .image-upload-button {
-    grid-column: 1 / -1;
   }
 }
 
@@ -833,15 +791,13 @@ h1 {
 
 .upload-button:hover,
 .tab-button:hover,
-.copy-button:hover,
-.image-upload-button:hover {
+.copy-button:hover {
   transform: translateY(-1px);
 }
 
 .upload-button,
 .tab-button,
-.copy-button,
-.image-upload-button {
+.copy-button {
   transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 

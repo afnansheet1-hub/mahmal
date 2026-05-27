@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>لوحة تحليل تقارير المبيعات PDF</title>
-    <link rel="stylesheet" href="./styles.css?v=20260528-2" />
+    <link rel="stylesheet" href="./styles.css?v=20260528-3" />
   </head>
   <body>
     <main class="app-shell">
@@ -178,11 +178,6 @@
             <button id="copyExtract" class="copy-button" type="button">نسخ النص</button>
           </div>
           <div class="session-upload">
-            <label class="image-upload-button" for="sessionImageInput">
-              <span aria-hidden="true">↑</span>
-              رفع صورة مرجعية
-            </label>
-            <input id="sessionImageInput" type="file" accept="image/*" />
             <label class="orders-field">
               <span>عدد الطلبات</span>
               <input id="ordersInput" type="number" min="0" step="1" placeholder="مثال: 52" />
@@ -191,9 +186,8 @@
               <span>Sales الطلبات</span>
               <input id="orderSalesInput" type="number" min="0" step="0.01" placeholder="مثال: 7669.19" />
             </label>
-            <p id="ocrStatus" class="ocr-status">أدخل عدد الطلبات وقيمة Sales من أعلى صورة إغلاق الجلسة.</p>
+            <p class="manual-status">أدخل عدد الطلبات وقيمة Sales يدويًا لتحديث ADT وAT وUPT في المستخرج.</p>
           </div>
-          <img id="sessionImagePreview" class="session-preview" alt="معاينة صورة إغلاق الجلسة" />
           <pre id="dailyExtract" class="daily-extract">سيظهر المستخرج هنا بعد تحليل ملف PDF.</pre>
         </article>
 
@@ -214,6 +208,6 @@
       </section>
     </main>
 
-    <script type="module" src="./app.js?v=20260528-7"></script>
+    <script type="module" src="./app.js?v=20260528-8"></script>
   </body>
 </html>
