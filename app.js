@@ -316,6 +316,11 @@ function isOrderDiscountName(product) {
   return name.includes("on your order") || name.includes("order your on");
 }
 
+function isMmtBundleName(product) {
+  const name = normalizeName(product);
+  return name.includes("per point on your order") || name.includes("order your on point per");
+}
+
 function sumQtyByKeywords(products, keywords) {
   return products
     .filter((row) => {
@@ -422,10 +427,7 @@ function extractDiscountBundleCountsFromRows(rows) {
       .filter((row) => Math.abs(Math.abs(row.amount) - 67.83) < 0.02 || Math.abs(Math.abs(row.amount / row.qty) - 67.83) < 0.02)
       .reduce((sum, row) => sum + row.qty, 0),
     mmt: rows
-      .filter((row) => {
-        const name = normalizeName(row.product);
-        return name.includes("per point") || name.includes("per order");
-      })
+      .filter((row) => isMmtBundleName(row.product))
       .filter((row) => Math.abs(Math.abs(row.amount) - 100.01) < 0.02 || Math.abs(Math.abs(row.amount / row.qty) - 100.01) < 0.02)
       .reduce((sum, row) => sum + row.qty, 0),
   };
