@@ -59,6 +59,7 @@ let discountBundleCounts = {
   mmt: null,
 };
 let offerDiscountQuantityTotal = 0;
+let pdfGrandQuantityTotal = null;
 let lastPdfSalesTotal = 0;
 let lastPdfQtyTotal = 0;
 
@@ -156,7 +157,7 @@ function rowFromLine(line) {
   }
 
   product = product.replace(/\s+/g, " ");
-  return { product, barcode, qty, amount, unitPrice: amount / qty };
+  return { product, barcode, qty, amount, unitPrice: amount / qty, rawText: text };
 }
 
 function mergeContinuationRows(rows) {
@@ -168,6 +169,23 @@ function mergeContinuationRows(rows) {
       product: row.product.replace(/\s+Each$/i, "").trim(),
       unitPrice: row.amount / row.qty,
     }));
+}
+
+function isGrandTotalRow(row) {
+  const text = `${row.rawText || ""} ${row.product || ""}`;
+  return /الإجمالي|اجمالي|ﻲﻟﺎﻤﺟﻹﺍ|ﻲﻟﺎﻤﺟﻻﺍ/i.test(text);
+}
+
+function extractPdfGrandQuantityTotal(rows) {
+  const totalRow = rows
+    .filter((row) => isGrandTotalRow(row) && row.amount > 0 && row.qty > 0)
+    .at(-1);
+  if (totalRow) return totalRow.qty;
+
+  const fallbackRows = rows
+    .filter((row) => !row.barcode && row.amount > 0 && row.qty > 0 && !isOfferDiscount(row))
+    .sort((a, b) => b.qty - a.qty);
+  return fallbackRows[0]?.qty ?? null;
 }
 
 async function analyzePdf(source, name) {
@@ -198,6 +216,7 @@ async function analyzePdf(source, name) {
   offerDiscountQuantityTotal = rows
     .filter((row) => isOfferDiscount(row))
     .reduce((sum, row) => sum + row.qty, 0);
+  pdfGrandQuantityTotal = extractPdfGrandQuantityTotal(rows);
   allExtractProducts = mergeContinuationRows(rows);
   allProducts = allExtractProducts.filter((row) => row.amount > 0);
   aiPdfTotalQty = null;
@@ -432,7 +451,7 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const salesForAdt = sessionOrderSales || 0;
   const adt = orders || fallbackAt;
   const at = adt ? salesForAdt / adt : 0;
-  const pdfQuantityTotal = aiPdfTotalQty ?? totalQty;
+  const pdfQuantityTotal = pdfGrandQuantityTotal ?? aiPdfTotalQty ?? totalQty;
   const uptBaseQty = Math.max(0, pdfQuantityTotal - offerDiscountQuantityTotal);
   const upt = adt ? uptBaseQty / adt : 0;
   const pink = sumQtyByKeywords(countProducts, ["pink", "pinko"]);
