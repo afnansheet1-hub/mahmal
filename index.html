@@ -192,25 +192,6 @@
               <h2>ما الذي يتم استخراجه؟</h2>
             </div>
           </div>
-          <div class="ai-config">
-            <label class="orders-field">
-              <span>OpenRouter API Key</span>
-              <input id="openRouterKey" type="password" placeholder="sk-or-v1-..." autocomplete="off" />
-            </label>
-            <label class="orders-field">
-              <span>الموديل المجاني</span>
-              <select id="openRouterModel">
-                <option value="qwen/qwen3-235b-a22b:free">qwen/qwen3-235b-a22b:free</option>
-                <option value="deepseek/deepseek-chat-v3-0324:free">deepseek/deepseek-chat-v3-0324:free</option>
-                <option value="google/gemini-2.0-flash-exp:free">google/gemini-2.0-flash-exp:free</option>
-              </select>
-            </label>
-            <div class="ai-actions">
-              <button id="refreshFreeModels" class="copy-button secondary" type="button">تحديث المجانية</button>
-              <button id="aiAnalyzePdf" class="copy-button" type="button">تحليل كمية PDF</button>
-            </div>
-            <p id="aiStatus" class="ocr-status">OpenRouter اختياري لتحسين استخراج إجمالي الكمية وخصومات العروض من نص PDF.</p>
-          </div>
           <div class="insights">
             <div class="insight">Sales في المستخرج يأخذ قيمة Sales الطلبات التي تدخلها يدويًا، ويستخدم إجمالي PDF فقط إذا تركتها فارغة.</div>
             <div class="insight">أدخل عدد الطلبات وSales من صورة الجلسة: ADT = عدد الطلبات، و AT = Sales ÷ ADT.</div>
@@ -221,7 +202,6 @@
       </section>
     </main>
 
-    <script src="./config.local.js"></script>
-    <script type="module" src="./app.js?v=20260526-13"></script>
+    <script type="module" src="./app.js?v=20260527-1"></script>
   </body>
 </html>
