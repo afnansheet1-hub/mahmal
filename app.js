@@ -58,7 +58,7 @@ let discountBundleCounts = {
   discoveryWinter: null,
   mmt: null,
 };
-let quantityWithoutBarcodeTotal = 0;
+let offerDiscountQuantityTotal = 0;
 let lastPdfSalesTotal = 0;
 let lastPdfQtyTotal = 0;
 
@@ -195,8 +195,8 @@ async function analyzePdf(source, name) {
   }
 
   latestPdfText = pageTexts.join("\n");
-  quantityWithoutBarcodeTotal = rows
-    .filter((row) => !row.barcode)
+  offerDiscountQuantityTotal = rows
+    .filter((row) => isOfferDiscount(row))
     .reduce((sum, row) => sum + row.qty, 0);
   allExtractProducts = mergeContinuationRows(rows);
   allProducts = allExtractProducts.filter((row) => row.amount > 0);
@@ -433,8 +433,8 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const adt = orders || fallbackAt;
   const at = adt ? salesForAdt / adt : 0;
   const pdfQuantityTotal = aiPdfTotalQty ?? totalQty;
-  const uptBaseQty = Math.max(0, pdfQuantityTotal - quantityWithoutBarcodeTotal);
-  const upt = orders ? uptBaseQty / orders : adt ? totalQty / adt : 0;
+  const uptBaseQty = Math.max(0, pdfQuantityTotal - offerDiscountQuantityTotal);
+  const upt = at ? uptBaseQty / at : 0;
   const pink = sumQtyByKeywords(countProducts, ["pink", "pinko"]);
   const muskCollection = sumQtyByMappedProduct(countProducts, "muskCollection");
   const pinkMuskBundle = discountBundleCounts.pinkMusk ?? 0;
