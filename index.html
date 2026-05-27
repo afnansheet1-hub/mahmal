@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>لوحة تحليل تقارير المبيعات PDF</title>
-    <link rel="stylesheet" href="./styles.css?v=20260528-3" />
+    <link rel="stylesheet" href="./styles.css?v=20260528-4" />
   </head>
   <body>
     <main class="app-shell">
@@ -200,14 +200,37 @@
           </div>
           <div class="insights">
             <div class="insight">Sales في المستخرج يأخذ قيمة Sales الطلبات التي تدخلها يدويًا، ويستخدم إجمالي PDF فقط إذا تركتها فارغة.</div>
-            <div class="insight">أدخل عدد الطلبات وSales من صورة الجلسة: ADT = عدد الطلبات، و AT = Sales ÷ ADT.</div>
+            <div class="insight">أدخل عدد الطلبات وSales يدويًا: ADT = عدد الطلبات، و AT = Sales ÷ ADT.</div>
             <div class="insight">UPT = (إجمالي كمية PDF من صف الإجمالي - كميات on your order 100% و 100.01 per point on your order) ÷ ADT.</div>
             <div class="insight">Cash وJahez غير موجودة في التقرير الحالي، لذلك تظهر N/A إلى أن تتوفر في PDF.</div>
+          </div>
+          <div class="review-block">
+            <p class="section-kicker">مراجعة الحساب</p>
+            <div id="calculationReview" class="calc-review">ستظهر تفاصيل حساب UPT بعد تحميل PDF.</div>
+          </div>
+          <div class="review-block">
+            <p class="section-kicker">جدول العروض</p>
+            <div class="offer-table-wrap">
+              <table class="offer-table">
+                <thead>
+                  <tr>
+                    <th>العرض</th>
+                    <th>الكمية</th>
+                    <th>القيمة</th>
+                  </tr>
+                </thead>
+                <tbody id="offerRowsBody">
+                  <tr>
+                    <td colspan="3">ستظهر عروض on your order هنا.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </article>
       </section>
     </main>
 
-    <script type="module" src="./app.js?v=20260528-8"></script>
+    <script type="module" src="./app.js?v=20260528-10"></script>
   </body>
 </html>

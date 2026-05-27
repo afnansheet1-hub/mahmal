@@ -20,6 +20,8 @@ const els = {
   priceBands: document.querySelector("#priceBands"),
   dailyExtract: document.querySelector("#dailyExtract"),
   copyExtract: document.querySelector("#copyExtract"),
+  calculationReview: document.querySelector("#calculationReview"),
+  offerRowsBody: document.querySelector("#offerRowsBody"),
   ordersInput: document.querySelector("#ordersInput"),
   orderSalesInput: document.querySelector("#orderSalesInput"),
   barChart: document.querySelector("#barChart"),
@@ -55,6 +57,7 @@ let discountBundleCounts = {
   discoveryWinter: null,
   mmt: null,
 };
+let offerReviewRows = [];
 let offerDiscountQuantityTotal = 0;
 let pdfGrandQuantityTotal = null;
 let lastPdfSalesTotal = 0;
@@ -68,6 +71,9 @@ function setStatus(text, type = "ready") {
 
 function resetEmptyState() {
   hasReport = false;
+  offerReviewRows = [];
+  offerDiscountQuantityTotal = 0;
+  pdfGrandQuantityTotal = null;
   document.body.classList.remove("has-report");
   els.fileName.textContent = "لم يتم تحميل ملف";
   els.reportMeta.textContent = "بانتظار التقرير";
@@ -84,6 +90,8 @@ function resetEmptyState() {
   els.preview.replaceChildren();
   els.productsBody.innerHTML = "<tr><td colspan='6'>ارفع ملف PDF لعرض المنتجات.</td></tr>";
   els.dailyExtract.textContent = "سيظهر المستخرج هنا بعد تحميل ملف PDF.";
+  els.calculationReview.textContent = "ستظهر تفاصيل حساب UPT بعد تحميل PDF.";
+  els.offerRowsBody.innerHTML = "<tr><td colspan='3'>ستظهر عروض on your order هنا.</td></tr>";
   setStatus("ارفع ملف PDF لبدء التحليل وعرض القيم.", "ready");
 }
 
@@ -234,9 +242,8 @@ async function analyzePdf(source, name) {
   }
 
   latestPdfText = pageTexts.join("\n");
-  offerDiscountQuantityTotal = rows
-    .filter((row) => isOfferDiscount(row))
-    .reduce((sum, row) => sum + row.qty, 0);
+  offerReviewRows = rows.filter((row) => isReviewedOffer(row));
+  offerDiscountQuantityTotal = offerReviewRows.reduce((sum, row) => sum + row.qty, 0);
   pdfGrandQuantityTotal = extractPdfGrandQuantityTotal(rows);
   allExtractProducts = mergeContinuationRows(rows);
   allProducts = allExtractProducts.filter((row) => row.amount > 0);
@@ -336,9 +343,20 @@ function isOrderDiscountName(product) {
   return name.includes("on your order") || name.includes("order your on");
 }
 
+function isOrder100DiscountName(product) {
+  const name = normalizeName(product);
+  const hasOrderDiscount = name.includes("on your order") || name.includes("order your on");
+  const hasPointDiscount = name.includes("per point") || name.includes("point per");
+  return hasOrderDiscount && !hasPointDiscount;
+}
+
 function isMmtBundleName(product) {
   const name = normalizeName(product);
   return name.includes("per point on your order") || name.includes("order your on point per");
+}
+
+function isReviewedOffer(row) {
+  return isOrder100DiscountName(row.product) || isMmtBundleName(row.product);
 }
 
 function sumQtyByKeywords(products, keywords) {
@@ -521,6 +539,55 @@ Tawziyat Box solo : ${formatPlainNumber(tawziyatBoxSolo)}
 - ADT :N/A`;
 
   els.dailyExtract.textContent = currentExtractText;
+  renderCalculationReview({ pdfQuantityTotal, offerQty: offerDiscountQuantityTotal, adt, at, uptBaseQty, upt });
+  renderOfferRows();
+}
+
+function renderCalculationReview({ pdfQuantityTotal, offerQty, adt, at, uptBaseQty, upt }) {
+  els.calculationReview.innerHTML = `
+    <div class="calc-line">
+      <span>UPT</span>
+      <strong>(${formatPlainNumber(pdfQuantityTotal)} - ${formatPlainNumber(offerQty)}) ÷ ${formatPlainNumber(adt)} = ${formatPlainNumber(upt)}</strong>
+    </div>
+    <div class="calc-grid">
+      <div><span>إجمالي كمية PDF</span><strong>${formatPlainNumber(pdfQuantityTotal)}</strong></div>
+      <div><span>كمية العروض</span><strong>${formatPlainNumber(offerQty)}</strong></div>
+      <div><span>بعد الطرح</span><strong>${formatPlainNumber(uptBaseQty)}</strong></div>
+      <div><span>ADT</span><strong>${formatPlainNumber(adt)}</strong></div>
+      <div><span>AT</span><strong>${formatPlainNumber(at)}</strong></div>
+    </div>
+  `;
+}
+
+function getOfferLabel(row) {
+  return isMmtBundleName(row.product) ? "100.01 per point on your order" : "on your order 100%";
+}
+
+function renderOfferRows() {
+  els.offerRowsBody.innerHTML = "";
+  if (!offerReviewRows.length) {
+    els.offerRowsBody.innerHTML = "<tr><td colspan='3'>لا توجد عروض مطابقة داخل PDF.</td></tr>";
+    return;
+  }
+
+  for (const row of offerReviewRows) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(getOfferLabel(row))}</td>
+      <td>${formatPlainNumber(row.qty)}</td>
+      <td>${moneyFormatter.format(row.amount)} ر.س</td>
+    `;
+    els.offerRowsBody.appendChild(tr);
+  }
+
+  const total = document.createElement("tr");
+  total.className = "offer-total-row";
+  total.innerHTML = `
+    <td>الإجمالي</td>
+    <td>${formatPlainNumber(offerDiscountQuantityTotal)}</td>
+    <td>${moneyFormatter.format(offerReviewRows.reduce((sum, row) => sum + row.amount, 0))} ر.س</td>
+  `;
+  els.offerRowsBody.appendChild(total);
 }
 
 function updateOrders(value) {

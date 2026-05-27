@@ -444,6 +444,99 @@ h2 {
   margin-top: 0;
 }
 
+.review-block {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.calc-review {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.calc-line {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.calc-line span,
+.calc-grid span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.calc-line strong {
+  direction: ltr;
+  text-align: left;
+  font-size: 18px;
+}
+
+.calc-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.calc-grid div {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.calc-grid strong {
+  direction: ltr;
+  text-align: left;
+  font-size: 16px;
+}
+
+.offer-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.offer-table {
+  min-width: 0;
+  table-layout: auto;
+}
+
+.offer-table th,
+.offer-table td {
+  width: auto;
+  white-space: normal;
+}
+
+.offer-table th:nth-child(1),
+.offer-table td:nth-child(1) {
+  width: 54%;
+}
+
+.offer-table th:nth-child(2),
+.offer-table td:nth-child(2),
+.offer-table th:nth-child(3),
+.offer-table td:nth-child(3) {
+  width: 23%;
+  direction: ltr;
+  text-align: left;
+}
+
+.offer-total-row td {
+  background: rgba(17, 126, 116, 0.08);
+  font-weight: 900;
+}
+
 .focus-card {
   display: grid;
   gap: 5px;
