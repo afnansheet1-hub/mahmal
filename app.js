@@ -368,15 +368,6 @@ function sumQtyByKeywords(products, keywords) {
     .reduce((sum, row) => sum + row.qty, 0);
 }
 
-function sumAmountByKeywords(products, keywords) {
-  return products
-    .filter((row) => {
-      const name = normalizeName(row.product);
-      return keywords.some((keyword) => name.includes(keyword));
-    })
-    .reduce((sum, row) => sum + row.amount, 0);
-}
-
 const dailyProductMap = {
   discoveryBlack: {
     barcodes: ["6287020284793"],
@@ -400,6 +391,30 @@ const dailyProductMap = {
   },
 };
 
+const makeupBarcodes = [
+  "6287020283857",
+  "6287020283864",
+  "6287020283871",
+  "6287020283888",
+  "6287020283895",
+  "6287020283301",
+  "6287020283918",
+  "6287020283925",
+  "6287020283932",
+  "6287020284076",
+  "6287020284083",
+  "6287020284090",
+  "6287020284106",
+  "6287020284113",
+  "6287020284120",
+  "6287020284236",
+  "6287020284243",
+  "6287020284939",
+  "6287020284946",
+  "6287020284922",
+  "6287020284915",
+];
+
 function productMatches(row, rule) {
   if (rule.barcodes.includes(row.barcode)) return true;
   const name = normalizeName(row.product);
@@ -411,6 +426,13 @@ function sumQtyByMappedProduct(products, key) {
   return products
     .filter((row) => productMatches(row, rule))
     .reduce((sum, row) => sum + row.qty, 0);
+}
+
+function sumAmountByBarcodes(products, barcodes) {
+  const barcodeSet = new Set(barcodes);
+  return products
+    .filter((row) => barcodeSet.has(row.barcode))
+    .reduce((sum, row) => sum + row.amount, 0);
 }
 
 function extractMappedDailyQuantities(text) {
@@ -504,7 +526,7 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const d5Box = sumQtyByMappedProduct(countProducts, "d5Box");
   const tawziat = sumQtyByMappedProduct(countProducts, "tawziatCollection");
   const mmtBundle = discountBundleCounts.mmt ?? 0;
-  const makeupSales = sumAmountByKeywords(countProducts, ["makeup", "make up"]);
+  const makeupSales = sumAmountByBarcodes(countProducts, makeupBarcodes);
   const tawziyatBoxSolo = sumQtyByMappedProduct(countProducts, "tawziyatBoxSolo");
 
   currentExtractText = `● ALMAHMAL ●
