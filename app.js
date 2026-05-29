@@ -506,6 +506,24 @@ ${name}
   applyAnalysisRows({ ...ocrResult, pdf, name, usedOcr: true });
 }
 
+async function analyzePdfWithAutomaticOcr(buffer, name) {
+  try {
+    await analyzePdf({ data: copyArrayBuffer(buffer) }, name);
+  } catch (error) {
+    if (/createWorker|tesseract|OCR worker|worker/i.test(String(error?.message || error))) {
+      throw error;
+    }
+
+    setStatus("لم تنجح القراءة العادية. جاري تشغيل OCR تلقائيًا بدون ضغط زر...", "loading");
+    showExtractProgress(`لم تنجح القراءة العادية.
+
+${name}
+
+جاري تشغيل OCR تلقائيًا وقراءة كل صفحات PDF...`);
+    await analyzePdf({ data: copyArrayBuffer(buffer) }, name, { forceOcr: true });
+  }
+}
+
 async function renderPreview(pdf) {
   const page = await pdf.getPage(1);
   const viewport = page.getViewport({ scale: 1.6 });
@@ -1038,7 +1056,7 @@ ${file.name}
     const bytes = await readFileBuffer(file);
     lastPdfBytes = copyArrayBuffer(bytes);
     lastPdfName = file.name;
-    await analyzePdf({ data: bytes }, file.name);
+    await analyzePdfWithAutomaticOcr(bytes, file.name);
   } catch (error) {
     console.error(error);
     const message = userFacingError(error);
