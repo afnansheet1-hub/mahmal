@@ -198,8 +198,9 @@ function normalizeDigits(value) {
 }
 
 function parseAmount(value) {
-  const match = normalizeDigits(value).replace(/[﷼]/g, "").match(/-?\s*[\d,]+\.\d{2}/);
-  return match ? Number(match[0].replace(/\s|,/g, "")) : null;
+  const matches = normalizeDigits(value).replace(/[﷼]/g, "").match(/-?\s*[\d,]+\.\d{2}/g) || [];
+  const match = matches.find((item) => item.trim().startsWith("-")) || matches[0];
+  return match ? Number(match.replace(/\s|,/g, "")) : null;
 }
 
 function parseQty(value) {
