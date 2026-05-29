@@ -1,6 +1,10 @@
-import * as pdfjsLib from "./vendor/pdf.min.mjs";
+const pdfjsLib = window.pdfjsLib;
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = "./vendor/pdf.worker.min.mjs";
+if (!pdfjsLib) {
+  throw new Error("PDF reader failed to load");
+}
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = "./vendor/pdf.legacy.worker.min.js";
 
 const defaultPdfName = "تفاصيل المبيعات (3).pdf";
 const els = {
@@ -93,6 +97,26 @@ function replaceNodeChildren(element, ...children) {
   children.forEach((child) => element.appendChild(child));
 }
 
+function readFileBuffer(file) {
+  if (file.arrayBuffer) {
+    return file.arrayBuffer();
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error("File could not be read"));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function copyArrayBuffer(buffer) {
+  const bytes = new Uint8Array(buffer);
+  const copy = new Uint8Array(bytes.length);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
 function showReportShell() {
   document.body.classList.add("has-report");
   activateView("dashboardView");
@@ -105,6 +129,9 @@ function showExtractProgress(message) {
 
 function userFacingError(error) {
   const raw = String(error?.message || error || "");
+  if (/PDF reader failed|pdfjs|workerSrc/i.test(raw)) {
+    return "تعذر تشغيل قارئ PDF في المتصفح. حدث الصفحة ثم أعد رفع الملف.";
+  }
   if (/createWorker|tesseract|worker/i.test(raw)) {
     return "تعذر تشغيل OCR على هذا المتصفح. جرّب إعادة تصدير PDF كنصي أو افتحه من جهاز آخر.";
   }
@@ -442,12 +469,13 @@ ${name}
   els.fileName.textContent = name;
   els.previewLabel.textContent = "الصفحة الأولى";
 
-  const loadingTask = pdfjsLib.getDocument({
-    ...source,
+  const pdfOptions = {
+    data: source.data,
     disableWorker: true,
-    useWorkerFetch: false,
-    isOffscreenCanvasSupported: false,
-  });
+    disableFontFace: true,
+    nativeImageDecoderSupport: "none",
+  };
+  const loadingTask = pdfjsLib.getDocument(pdfOptions);
   const pdf = await loadingTask.promise;
   await renderPreview(pdf);
   if (!forceOcr) {
@@ -1007,8 +1035,8 @@ els.input.addEventListener("change", async (event) => {
 ${file.name}
 
 جاري تجهيز الملف وقراءة جدول المبيعات...`);
-    const bytes = await file.arrayBuffer();
-    lastPdfBytes = bytes.slice(0);
+    const bytes = await readFileBuffer(file);
+    lastPdfBytes = copyArrayBuffer(bytes);
     lastPdfName = file.name;
     await analyzePdf({ data: bytes }, file.name);
   } catch (error) {
@@ -1030,7 +1058,7 @@ els.ocrRetryButton.addEventListener("click", async () => {
   if (!lastPdfBytes) return;
 
   try {
-    await analyzePdf({ data: lastPdfBytes.slice(0) }, lastPdfName || "PDF", { forceOcr: true });
+    await analyzePdf({ data: copyArrayBuffer(lastPdfBytes) }, lastPdfName || "PDF", { forceOcr: true });
   } catch (error) {
     console.error(error);
     const message = userFacingError(error);
