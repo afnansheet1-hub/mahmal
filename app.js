@@ -77,6 +77,15 @@ function setOcrRetryVisible(visible) {
   els.ocrRetryButton.hidden = !visible;
 }
 
+function activateView(viewId) {
+  document.querySelectorAll(".tab-button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.view === viewId);
+  });
+  document.querySelectorAll(".app-view").forEach((view) => {
+    view.classList.toggle("active", view.id === viewId);
+  });
+}
+
 function replaceNodeChildren(element, ...children) {
   while (element.firstChild) {
     element.removeChild(element.firstChild);
@@ -84,10 +93,28 @@ function replaceNodeChildren(element, ...children) {
   children.forEach((child) => element.appendChild(child));
 }
 
-function showExtractProgress(message) {
+function showReportShell() {
   document.body.classList.add("has-report");
+  activateView("dashboardView");
+}
+
+function showExtractProgress(message) {
   els.dailyExtract.textContent = message;
   els.calculationReview.textContent = "جاري تجهيز تفاصيل الحساب بعد قراءة PDF.";
+}
+
+function userFacingError(error) {
+  const raw = String(error?.message || error || "");
+  if (/createWorker|tesseract|worker/i.test(raw)) {
+    return "تعذر تشغيل OCR على هذا المتصفح. جرّب إعادة تصدير PDF كنصي أو افتحه من جهاز آخر.";
+  }
+  if (/No analyzable rows|text content|InvalidPDF|PDF/i.test(raw)) {
+    return "تعذر قراءة جدول المبيعات من هذا الملف. تأكد أن الملف PDF واضح وليس صورة منخفضة الجودة.";
+  }
+  if (/network|fetch|Failed to fetch|Load failed/i.test(raw)) {
+    return "تعذر تحميل ملفات القراءة المساعدة. تأكد من اتصال الإنترنت ثم أعد المحاولة.";
+  }
+  return "تعذر تحليل الملف. أعد تصدير PDF من النظام ثم ارفعه من جديد.";
 }
 
 function resetEmptyState() {
@@ -324,9 +351,23 @@ function getOcrScale(pdf) {
   return 2;
 }
 
+async function createOcrWorker(options) {
+  const tesseractModule = await import("./vendor/tesseract.esm.min.js");
+  const tesseract = tesseractModule.default || tesseractModule;
+  const createWorker =
+    tesseractModule.createWorker ||
+    tesseract.createWorker ||
+    window.Tesseract?.createWorker;
+
+  if (typeof createWorker !== "function") {
+    throw new Error("OCR worker is not available");
+  }
+
+  return createWorker("eng+ara", 1, options);
+}
+
 async function extractRowsWithOcr(pdf) {
-  const { createWorker } = await import("./vendor/tesseract.esm.min.js");
-  const worker = await createWorker("eng+ara", 1, {
+  const worker = await createOcrWorker({
     workerPath: new URL("./vendor/tesseract-worker.min.js", import.meta.url).href,
     langPath: "https://tessdata.projectnaptha.com/4.0.0",
     corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@v7.0.0",
@@ -377,7 +418,7 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
   mappedDailyQuantities = extractMappedDailyQuantities(latestPdfText);
   renderDashboard(pdf.numPages, allProducts, latestPdfText, name);
   hasReport = true;
-  document.body.classList.add("has-report");
+  showReportShell();
   setOcrRetryVisible(false);
   setStatus(
     usedOcr
@@ -391,6 +432,7 @@ async function analyzePdf(source, name, options = {}) {
   const forceOcr = options.forceOcr || false;
   hasReport = false;
   setOcrRetryVisible(false);
+  showReportShell();
   showExtractProgress(`جاري تحليل ملف PDF...
 
 ${name}
@@ -959,6 +1001,7 @@ els.input.addEventListener("change", async (event) => {
   if (!file) return;
 
   try {
+    showReportShell();
     showExtractProgress(`تم اختيار الملف من الجوال.
 
 ${file.name}
@@ -970,15 +1013,16 @@ ${file.name}
     await analyzePdf({ data: bytes }, file.name);
   } catch (error) {
     console.error(error);
+    const message = userFacingError(error);
     setOcrRetryVisible(Boolean(lastPdfBytes));
-    document.body.classList.add("has-report");
+    showReportShell();
     els.dailyExtract.textContent = `تعذر إنشاء المستخرج اليومي.
 
-السبب: ${error?.message || "غير معروف"}
+السبب: ${message}
 
 جرّب زر إعادة التحليل OCR، أو أعد تصدير ملف PDF من النظام ثم ارفعه من جديد.`;
     els.calculationReview.textContent = "لم يتم حساب UPT لأن تحليل PDF لم يكتمل.";
-    setStatus(`تعذر تحليل الملف. السبب: ${error?.message || "غير معروف"}. جرّب زر إعادة التحليل OCR أو أعد تصدير PDF بجودة أوضح.`, "error");
+    setStatus(message, "error");
   }
 });
 
@@ -989,15 +1033,16 @@ els.ocrRetryButton.addEventListener("click", async () => {
     await analyzePdf({ data: lastPdfBytes.slice(0) }, lastPdfName || "PDF", { forceOcr: true });
   } catch (error) {
     console.error(error);
+    const message = userFacingError(error);
     setOcrRetryVisible(true);
-    document.body.classList.add("has-report");
+    showReportShell();
     els.dailyExtract.textContent = `فشل إنشاء المستخرج حتى بعد OCR.
 
-السبب: ${error?.message || "غير معروف"}
+السبب: ${message}
 
 الحل الأسرع: افتح التقرير من الجوال، ثم استخدم مشاركة / طباعة / حفظ كـ PDF أو أعد تصديره من جهاز الكمبيوتر.`;
     els.calculationReview.textContent = "لم يتم حساب UPT لأن OCR لم يتمكن من قراءة جدول PDF.";
-    setStatus(`فشل OCR أيضًا. السبب: ${error?.message || "غير معروف"}. جرّب PDF أوضح أو افتح الملف ثم صدّره PDF من جديد.`, "error");
+    setStatus(message, "error");
   }
 });
 
@@ -1013,10 +1058,7 @@ els.orderSalesInput.addEventListener("input", () => {
 
 document.querySelectorAll(".tab-button").forEach((button) => {
   button.addEventListener("click", () => {
-    document.querySelectorAll(".tab-button").forEach((item) => item.classList.remove("active"));
-    document.querySelectorAll(".app-view").forEach((view) => view.classList.remove("active"));
-    button.classList.add("active");
-    document.querySelector(`#${button.dataset.view}`).classList.add("active");
+    activateView(button.dataset.view);
   });
 });
 
