@@ -1230,3 +1230,287 @@ h1 {
     grid-template-columns: 1fr;
   }
 }
+
+/* Responsive consistency: keep the desktop visual language on every screen. */
+@media (max-width: 1180px) {
+  .app-shell {
+    width: min(100% - 24px, 1500px);
+  }
+
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: auto;
+    gap: 14px;
+  }
+
+  .hero-copy,
+  .hero-card {
+    min-height: auto;
+  }
+
+  .workspace,
+  .extract-layout,
+  .summary-grid,
+  .detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .preview-panel {
+    position: static;
+  }
+
+  .pdf-preview {
+    min-height: 420px;
+    height: min(760px, 72vh);
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  html {
+    overflow-x: hidden;
+  }
+
+  body {
+    min-width: 0;
+    overflow-x: hidden;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 247, 245, 0.94)),
+      url("./assets/match-logo-bg.webp") center 14px / min(390px, 92vw) auto no-repeat fixed,
+      var(--bg);
+  }
+
+  .app-shell {
+    width: min(100% - 16px, 1500px);
+    padding-top: 10px;
+  }
+
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .hero-copy,
+  .hero-card,
+  .panel,
+  .metric,
+  .empty-card {
+    border-radius: 8px;
+  }
+
+  .hero-copy {
+    order: 1;
+    padding: 16px;
+  }
+
+  .hero-card {
+    order: 2;
+    gap: 12px;
+    padding: 16px;
+    align-content: start;
+  }
+
+  .hero-copy::before {
+    width: min(230px, 70vw);
+    height: 74px;
+    inset-inline-end: 12px;
+    top: 8px;
+    opacity: 0.13;
+  }
+
+  .eyebrow {
+    font-size: 11px;
+  }
+
+  h1 {
+    max-width: 100%;
+    font-size: clamp(30px, 9vw, 42px);
+    line-height: 1.16;
+  }
+
+  h2 {
+    font-size: 18px;
+  }
+
+  .hero-subtitle {
+    max-width: 100%;
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.75;
+  }
+
+  .hero-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .report-pill,
+  .upload-button,
+  .secondary-button {
+    width: 100%;
+    min-height: 48px;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .hero-card strong {
+    font-size: 16px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  .status-block {
+    padding: 10px;
+    font-size: 12px;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .metric {
+    min-height: 88px;
+    padding: 12px;
+  }
+
+  .metric span {
+    font-size: 12px;
+  }
+
+  .metric strong {
+    font-size: 22px;
+    overflow-wrap: anywhere;
+  }
+
+  .view-tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 4px;
+  }
+
+  .tab-button {
+    min-width: 0;
+    padding: 0 8px;
+    font-size: 13px;
+    white-space: normal;
+  }
+
+  .panel {
+    padding: 14px;
+  }
+
+  .panel-heading {
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .panel-heading,
+  .extract-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .session-upload {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .field,
+  .field input {
+    min-width: 0;
+  }
+
+  .daily-extract {
+    min-height: 420px;
+    padding: 14px;
+    font-size: 15px;
+    line-height: 1.75;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .calc-grid,
+  .workspace,
+  .extract-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .offer-table-wrap,
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .offer-table {
+    min-width: 0;
+  }
+
+  .table-wrap table:not(.offer-table) {
+    min-width: 720px;
+  }
+
+  .pdf-preview {
+    height: auto;
+    min-height: 360px;
+    max-height: 70vh;
+  }
+
+  .pdf-preview canvas {
+    max-width: 100%;
+  }
+
+  .empty-state {
+    min-height: 280px;
+    margin-top: 10px;
+  }
+
+  .empty-card {
+    padding: 20px 14px;
+  }
+
+  .empty-mark {
+    width: 58px;
+    height: 58px;
+    margin-bottom: 12px;
+  }
+
+  .empty-card h2 {
+    font-size: 24px;
+  }
+
+  .empty-card p {
+    font-size: 13px;
+    line-height: 1.7;
+    margin-bottom: 16px;
+  }
+}
+
+@media (max-width: 430px) {
+  .app-shell {
+    width: min(100% - 12px, 1500px);
+  }
+
+  .hero-copy,
+  .hero-card,
+  .panel {
+    padding: 12px;
+  }
+
+  .kpi-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .daily-extract {
+    font-size: 14px;
+  }
+}
