@@ -927,6 +927,12 @@ els.input.addEventListener("change", async (event) => {
     console.error(error);
     setOcrRetryVisible(Boolean(lastPdfBytes));
     document.body.classList.add("has-report");
+    els.dailyExtract.textContent = `تعذر إنشاء المستخرج اليومي.
+
+السبب: ${error?.message || "غير معروف"}
+
+جرّب زر إعادة التحليل OCR، أو أعد تصدير ملف PDF من النظام ثم ارفعه من جديد.`;
+    els.calculationReview.textContent = "لم يتم حساب UPT لأن تحليل PDF لم يكتمل.";
     setStatus(`تعذر تحليل الملف. السبب: ${error?.message || "غير معروف"}. جرّب زر إعادة التحليل OCR أو أعد تصدير PDF بجودة أوضح.`, "error");
   }
 });
@@ -940,6 +946,12 @@ els.ocrRetryButton.addEventListener("click", async () => {
     console.error(error);
     setOcrRetryVisible(true);
     document.body.classList.add("has-report");
+    els.dailyExtract.textContent = `فشل إنشاء المستخرج حتى بعد OCR.
+
+السبب: ${error?.message || "غير معروف"}
+
+الحل الأسرع: افتح التقرير من الجوال، ثم استخدم مشاركة / طباعة / حفظ كـ PDF أو أعد تصديره من جهاز الكمبيوتر.`;
+    els.calculationReview.textContent = "لم يتم حساب UPT لأن OCR لم يتمكن من قراءة جدول PDF.";
     setStatus(`فشل OCR أيضًا. السبب: ${error?.message || "غير معروف"}. جرّب PDF أوضح أو افتح الملف ثم صدّره PDF من جديد.`, "error");
   }
 });

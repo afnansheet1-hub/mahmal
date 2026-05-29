@@ -1277,6 +1277,7 @@ h1 {
   body {
     min-width: 0;
     overflow-x: hidden;
+    padding-top: env(safe-area-inset-top, 0);
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 247, 245, 0.94)),
       url("./assets/match-logo-bg.webp") center 14px / min(390px, 92vw) auto no-repeat fixed,
@@ -1285,7 +1286,7 @@ h1 {
 
   .app-shell {
     width: min(100% - 16px, 1500px);
-    padding-top: 10px;
+    padding-top: max(14px, calc(env(safe-area-inset-top, 0) + 12px));
   }
 
   .hero {
@@ -1411,6 +1412,7 @@ h1 {
   .panel-heading {
     align-items: stretch;
     gap: 8px;
+    margin-bottom: 14px;
   }
 
   .panel-heading,
@@ -1419,23 +1421,85 @@ h1 {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  #extractView {
+    align-items: start;
+    padding-top: 4px;
+  }
+
+  .extract-panel .panel-heading {
+    grid-template-columns: minmax(0, 1fr);
+    padding-top: 4px;
+    text-align: right;
+  }
+
+  .extract-panel .panel-heading > div {
+    display: grid;
+    min-width: 0;
+    gap: 4px;
+  }
+
+  .extract-panel .section-kicker {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .extract-panel h2 {
+    margin: 0;
+    font-size: 24px;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .copy-button {
+    width: 100%;
+    min-height: 48px;
+    justify-content: center;
+    text-align: center;
+  }
+
   .session-upload {
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
+    margin-bottom: 14px;
   }
 
+  .orders-field,
+  .orders-field input,
   .field,
   .field input {
     min-width: 0;
   }
 
+  .orders-field {
+    gap: 8px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .orders-field input {
+    width: 100%;
+    min-height: 54px;
+    font-size: 16px;
+  }
+
+  .manual-status {
+    font-size: 12px;
+    line-height: 1.8;
+  }
+
   .daily-extract {
-    min-height: 420px;
-    padding: 14px;
+    display: block;
+    width: 100%;
+    min-height: 460px;
+    max-height: 68vh;
+    padding: 16px;
     font-size: 15px;
-    line-height: 1.75;
+    line-height: 1.8;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+    word-break: break-word;
+    -webkit-overflow-scrolling: touch;
   }
 
   .calc-grid,
@@ -1512,5 +1576,7 @@ h1 {
 
   .daily-extract {
     font-size: 14px;
+    min-height: 430px;
+    padding: 14px;
   }
 }
