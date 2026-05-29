@@ -659,7 +659,7 @@ const dailyProductMap = {
     names: ["match collection match discovery set ramadan d5"],
   },
   tawziyatBoxSolo: {
-    barcodes: ["6287020286926"],
+    barcodes: ["6287020286926", "6287020286933"],
     names: ["tawziyat box solo"],
   },
 };
