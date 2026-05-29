@@ -55,6 +55,7 @@ let aiOfferDiscountQty = null;
 let discountBundleCounts = {
   pinkMusk: null,
   discoveryWinter: null,
+  magicD5: null,
   mmt: null,
 };
 let offerReviewRows = [];
@@ -470,6 +471,9 @@ function extractDiscountBundleCounts(text) {
     discoveryWinter: rows
       .filter((row) => Math.abs(row.amount - 67.83) < 0.02)
       .reduce((sum, row) => sum + row.qty, 0),
+    magicD5: rows
+      .filter((row) => Math.abs(row.amount - 21.74) < 0.02 || Math.abs(row.amount / row.qty - 21.74) < 0.02)
+      .reduce((sum, row) => sum + row.qty, 0),
     mmt: rows
       .filter((row) => Math.abs(row.amount - 100.01) < 0.02 || Math.abs(row.amount / row.qty - 100.01) < 0.02)
       .reduce((sum, row) => sum + row.qty, 0),
@@ -486,6 +490,10 @@ function extractDiscountBundleCountsFromRows(rows) {
       .filter((row) => isOrderDiscountName(row.product))
       .filter((row) => Math.abs(Math.abs(row.amount) - 67.83) < 0.02 || Math.abs(Math.abs(row.amount / row.qty) - 67.83) < 0.02)
       .reduce((sum, row) => sum + row.qty, 0),
+    magicD5: rows
+      .filter((row) => isOrderDiscountName(row.product))
+      .filter((row) => Math.abs(Math.abs(row.amount) - 21.74) < 0.02 || Math.abs(Math.abs(row.amount / row.qty) - 21.74) < 0.02)
+      .reduce((sum, row) => sum + row.qty, 0),
     mmt: rows
       .filter((row) => isMmtBundleName(row.product))
       .filter((row) => Math.abs(Math.abs(row.amount) - 100.01) < 0.02 || Math.abs(Math.abs(row.amount / row.qty) - 100.01) < 0.02)
@@ -497,6 +505,7 @@ function mergeDiscountBundleCounts(...counts) {
   return {
     pinkMusk: Math.max(...counts.map((count) => count.pinkMusk || 0)),
     discoveryWinter: Math.max(...counts.map((count) => count.discoveryWinter || 0)),
+    magicD5: Math.max(...counts.map((count) => count.magicD5 || 0)),
     mmt: Math.max(...counts.map((count) => count.mmt || 0)),
   };
 }
@@ -524,6 +533,7 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const discoveryWinterBundle = discountBundleCounts.discoveryWinter ?? 0;
   const magicLayering = sumQtyByKeywords(countProducts, ["magic", "layering"]);
   const d5Box = sumQtyByMappedProduct(countProducts, "d5Box");
+  const magicD5Bundle = discountBundleCounts.magicD5 ?? 0;
   const tawziat = sumQtyByMappedProduct(countProducts, "tawziatCollection");
   const mmtBundle = discountBundleCounts.mmt ?? 0;
   const makeupSales = sumAmountByBarcodes(countProducts, makeupBarcodes);
@@ -549,7 +559,7 @@ ${formatDateForExtract(date)}
 ------------------
 - Magic of Layering : ${formatPlainNumber(magicLayering)}
 - D5 Box :${formatPlainNumber(d5Box)}
-- Bundle(M+D) : ${formatPlainNumber(Math.min(magicLayering, d5Box))}
+- Bundle(M+D) : ${formatPlainNumber(magicD5Bundle)}
 ------------------
 - Tawziat collection :${formatPlainNumber(tawziat)}
 - MMT Bundle : ${formatPlainNumber(mmtBundle)}
