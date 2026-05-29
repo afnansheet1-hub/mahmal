@@ -1118,8 +1118,36 @@ els.copyExtract.addEventListener("click", async () => {
   }, 1400);
 });
 
+function notifySiteVisit() {
+  const storageKey = "matchVisitNotificationSent";
+  try {
+    if (window.sessionStorage?.getItem(storageKey) === "1") return;
+    window.sessionStorage?.setItem(storageKey, "1");
+  } catch (error) {
+    // Ignore private-mode storage errors; the notification can still be sent.
+  }
+
+  const payload = {
+    path: `${window.location.pathname}${window.location.search}`,
+    referrer: document.referrer || "مباشر",
+    userAgent: navigator.userAgent,
+    language: navigator.language,
+    screen: `${window.screen?.width || "-"}x${window.screen?.height || "-"}`,
+  };
+
+  window
+    .fetch("/api/visit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    })
+    .catch(() => {});
+}
+
 async function boot() {
   resetEmptyState();
+  notifySiteVisit();
 }
 
 boot();
