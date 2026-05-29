@@ -43,8 +43,8 @@ body::before {
 
 .credit-toast {
   position: fixed;
-  inset-block-start: 18px;
-  inset-inline: 18px auto;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
   z-index: 1000;
   max-width: min(460px, calc(100vw - 36px));
   display: grid;
@@ -63,6 +63,7 @@ body::before {
   text-align: right;
   pointer-events: none;
   animation: creditToast 5s ease forwards;
+  transform: translate(-50%, -50%);
 }
 
 .credit-toast img {
@@ -81,19 +82,19 @@ body::before {
 @keyframes creditToast {
   0% {
     opacity: 0;
-    transform: translateY(-12px) scale(0.98);
+    transform: translate(-50%, calc(-50% - 14px)) scale(0.98);
   }
 
   12%,
   82% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translate(-50%, -50%) scale(1);
   }
 
   100% {
     opacity: 0;
     visibility: hidden;
-    transform: translateY(-10px) scale(0.98);
+    transform: translate(-50%, calc(-50% - 12px)) scale(0.98);
   }
 }
 
@@ -1764,11 +1765,13 @@ h1 {
 
 @media (max-width: 430px) {
   .credit-toast {
-    inset-block-start: 12px;
-    inset-inline: 12px;
+    inset-block-start: 50%;
+    inset-inline-start: 50%;
+    inset-inline-end: auto;
     grid-template-columns: 74px minmax(0, 1fr);
     gap: 10px;
-    max-width: none;
+    width: calc(100vw - 24px);
+    max-width: 360px;
     padding: 10px 12px;
     border-radius: 14px;
     font-size: 13px;
