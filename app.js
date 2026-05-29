@@ -77,6 +77,13 @@ function setOcrRetryVisible(visible) {
   els.ocrRetryButton.hidden = !visible;
 }
 
+function replaceNodeChildren(element, ...children) {
+  while (element.firstChild) {
+    element.removeChild(element.firstChild);
+  }
+  children.forEach((child) => element.appendChild(child));
+}
+
 function showExtractProgress(message) {
   document.body.classList.add("has-report");
   els.dailyExtract.textContent = message;
@@ -101,7 +108,7 @@ function resetEmptyState() {
   els.focusCards.innerHTML = "";
   els.priceBands.innerHTML = "";
   els.barChart.innerHTML = "";
-  els.preview.replaceChildren();
+  replaceNodeChildren(els.preview);
   els.productsBody.innerHTML = "<tr><td colspan='6'>ارفع ملف PDF لعرض المنتجات.</td></tr>";
   els.dailyExtract.textContent = "سيظهر المستخرج هنا بعد تحميل ملف PDF.";
   els.calculationReview.textContent = "ستظهر تفاصيل حساب UPT بعد تحميل PDF.";
@@ -112,10 +119,10 @@ function resetEmptyState() {
 
 function escapeHtml(value) {
   return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function cleanText(value) {
@@ -191,7 +198,8 @@ function rowFromLine(line) {
   const qtyItems = line.items
     .map((item) => ({ value: parseQty(item.text), x: item.x, text: item.text }))
     .filter((item) => item.value !== null && item.value < 10000 && (!amount || Math.abs(item.value - amount) > 0.01));
-  const qty = (barcode ? qtyItems.at(-1)?.value : qtyItems[0]?.value) ?? null;
+  const lastQtyItem = qtyItems.length ? qtyItems[qtyItems.length - 1] : null;
+  const qty = (barcode ? lastQtyItem?.value : qtyItems[0]?.value) ?? null;
 
   if (amount === null || qty === null) {
     return null;
@@ -215,9 +223,15 @@ function rowFromText(text) {
   const normalizedText = normalizeDigits(text).replace(/\s+/g, " ").trim();
   const amount = parseAmount(normalizedText);
   const barcode = extractBarcode(normalizedText);
-  const qtyCandidates = [...normalizedText.matchAll(/(?:^|\s)(\d+(?:\.\d)?)(?:\s|$)/g)]
-    .map((match) => Number(match[1]))
-    .filter((value) => value !== null && value < 10000 && (!amount || Math.abs(value - amount) > 0.01));
+  const qtyCandidates = [];
+  const qtyPattern = /(?:^|\s)(\d+(?:\.\d)?)(?:\s|$)/g;
+  let qtyMatch;
+  while ((qtyMatch = qtyPattern.exec(normalizedText)) !== null) {
+    const value = Number(qtyMatch[1]);
+    if (value !== null && value < 10000 && (!amount || Math.abs(value - amount) > 0.01)) {
+      qtyCandidates.push(value);
+    }
+  }
   const filteredQty = /100\s*%/.test(normalizedText) ? qtyCandidates.filter((value) => Math.abs(value - 100) > 0.01) : qtyCandidates;
   const qty = filteredQty[0] ?? qtyCandidates[0] ?? null;
 
@@ -281,9 +295,8 @@ function isGrandTotalRow(row) {
 }
 
 function extractPdfGrandQuantityTotal(rows) {
-  const totalRow = rows
-    .filter((row) => isGrandTotalRow(row) && row.amount > 0 && row.qty > 0)
-    .at(-1);
+  const totalRows = rows.filter((row) => isGrandTotalRow(row) && row.amount > 0 && row.qty > 0);
+  const totalRow = totalRows.length ? totalRows[totalRows.length - 1] : null;
   if (totalRow) return totalRow.qty;
 
   const fallbackRows = rows
@@ -387,7 +400,12 @@ ${name}
   els.fileName.textContent = name;
   els.previewLabel.textContent = "الصفحة الأولى";
 
-  const loadingTask = pdfjsLib.getDocument(source);
+  const loadingTask = pdfjsLib.getDocument({
+    ...source,
+    disableWorker: true,
+    useWorkerFetch: false,
+    isOffscreenCanvasSupported: false,
+  });
   const pdf = await loadingTask.promise;
   await renderPreview(pdf);
   if (!forceOcr) {
@@ -426,7 +444,7 @@ async function renderPreview(pdf) {
   canvas.width = Math.floor(viewport.width);
   canvas.height = Math.floor(viewport.height);
   await page.render({ canvasContext: context, viewport }).promise;
-  els.preview.replaceChildren(canvas);
+  replaceNodeChildren(els.preview, canvas);
 }
 
 function renderDashboard(pageCount, products, allText, name) {
