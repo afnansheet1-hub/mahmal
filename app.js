@@ -727,8 +727,9 @@ function extractMappedDailyQuantities(text) {
 function extractDiscountBundleCounts(text) {
   const rows = [];
   const normalized = text.replace(/\u200b/g, " ");
-  const productFirst = /on\s+your\s+order\s+100%[\s\S]{0,80}?(\d+(?:\.\d+)?)\s*تاﺪﺣﻮﻟا[\s\S]{0,80}?-\s*([\d,]+\.\d{2})/g;
-  const amountFirst = /-\s*([\d,]+\.\d{2})[\s\S]{0,80}?(\d+(?:\.\d+)?)\s*تاﺪﺣﻮﻟا[\s\S]{0,80}?on\s+your\s+order\s+100%/g;
+  const offerName = "(?:on\\s+your\\s+order\\s+100%|(?:100\\.01\\s*)?per\\s+point\\s+on\\s+your\\s+order|(?:100\\.01\\s*)?per\\s+order\\s+on\\s+your\\s+order)";
+  const productFirst = new RegExp(`${offerName}[\\s\\S]{0,80}?(\\d+(?:\\.\\d+)?)\\s*تاﺪﺣﻮﻟا[\\s\\S]{0,80}?-\\s*([\\d,]+\\.\\d{2})`, "g");
+  const amountFirst = new RegExp(`-\\s*([\\d,]+\\.\\d{2})[\\s\\S]{0,80}?(\\d+(?:\\.\\d+)?)\\s*تاﺪﺣﻮﻟا[\\s\\S]{0,80}?${offerName}`, "g");
   let match;
   while ((match = productFirst.exec(normalized)) !== null) {
     rows.push({ qty: Number(match[1]), amount: Number(match[2].replace(/,/g, "")) });
