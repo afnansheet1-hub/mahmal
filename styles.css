@@ -316,6 +316,10 @@ h2 {
   display: none;
 }
 
+.app-view:not(.active) {
+  display: none !important;
+}
+
 .app-view.active {
   display: grid;
 }
