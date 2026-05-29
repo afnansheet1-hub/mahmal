@@ -365,6 +365,10 @@ function isReviewedOffer(row) {
   return isOrder100DiscountName(row.product) || isMmtBundleName(row.product);
 }
 
+function discountUnitMatches(row, target) {
+  return row.qty ? Math.abs(Math.abs(row.amount / row.qty) - target) < 0.02 : false;
+}
+
 function sumQtyByKeywords(products, keywords) {
   return products
     .filter((row) => {
@@ -471,14 +475,14 @@ function extractDiscountBundleCounts(text) {
   }
   return {
     pinkMusk: rows
-      .filter((row) => Math.abs(row.amount - 46.09) < 0.02)
+      .filter((row) => discountUnitMatches(row, 46.09))
       .reduce((sum, row) => sum + row.qty, 0),
     discoveryWinter: rows
-      .filter((row) => Math.abs(row.amount - 67.83) < 0.02)
+      .filter((row) => discountUnitMatches(row, 67.83))
       .reduce((sum, row) => sum + row.qty, 0),
     magicD5: 0,
     mmt: rows
-      .filter((row) => Math.abs(row.amount - 100.01) < 0.02 || Math.abs(row.amount / row.qty - 100.01) < 0.02)
+      .filter((row) => discountUnitMatches(row, 100.01))
       .reduce((sum, row) => sum + row.qty, 0),
   };
 }
@@ -487,19 +491,19 @@ function extractDiscountBundleCountsFromRows(rows) {
   return {
     pinkMusk: rows
       .filter((row) => isOrderDiscountName(row.product))
-      .filter((row) => Math.abs(Math.abs(row.amount) - 46.09) < 0.02 || Math.abs(Math.abs(row.amount / row.qty) - 46.09) < 0.02)
+      .filter((row) => discountUnitMatches(row, 46.09))
       .reduce((sum, row) => sum + row.qty, 0),
     discoveryWinter: rows
       .filter((row) => isOrderDiscountName(row.product))
-      .filter((row) => Math.abs(Math.abs(row.amount) - 67.83) < 0.02 || Math.abs(Math.abs(row.amount / row.qty) - 67.83) < 0.02)
+      .filter((row) => discountUnitMatches(row, 67.83))
       .reduce((sum, row) => sum + row.qty, 0),
     magicD5: rows
       .filter((row) => isOrder100DiscountName(row.product))
-      .filter((row) => Math.abs(Math.abs(row.amount) - 21.74) < 0.02 || Math.abs(Math.abs(row.amount / row.qty) - 21.74) < 0.02)
+      .filter((row) => discountUnitMatches(row, 21.74))
       .reduce((sum, row) => sum + row.qty, 0),
     mmt: rows
       .filter((row) => isMmtBundleName(row.product))
-      .filter((row) => Math.abs(Math.abs(row.amount) - 100.01) < 0.02 || Math.abs(Math.abs(row.amount / row.qty) - 100.01) < 0.02)
+      .filter((row) => discountUnitMatches(row, 100.01))
       .reduce((sum, row) => sum + row.qty, 0),
   };
 }
