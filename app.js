@@ -768,7 +768,6 @@ function extractDiscountBundleCountsFromRows(rows) {
       .reduce((sum, row) => sum + row.qty, 0),
     mmt: rows
       .filter((row) => isMmtBundleName(row.product))
-      .filter((row) => discountUnitMatches(row, 100.01))
       .reduce((sum, row) => sum + row.qty, 0),
   };
 }
@@ -807,7 +806,10 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const d5Box = sumQtyByMappedProduct(countProducts, "d5Box");
   const magicD5Bundle = discountBundleCounts.magicD5 ?? 0;
   const tawziat = sumQtyByMappedProduct(countProducts, "tawziatCollection");
-  const mmtBundle = discountBundleCounts.mmt ?? 0;
+  const mmtBundleFromOffers = offerReviewRows
+    .filter((row) => isMmtBundleName(row.product))
+    .reduce((sum, row) => sum + row.qty, 0);
+  const mmtBundle = Math.max(discountBundleCounts.mmt ?? 0, mmtBundleFromOffers);
   const makeupSales = sumAmountByBarcodes(countProducts, makeupBarcodes);
   const tawziyatBoxSolo = sumQtyByMappedProduct(countProducts, "tawziyatBoxSolo");
 
