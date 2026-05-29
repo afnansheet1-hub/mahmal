@@ -353,7 +353,12 @@ function isOrder100DiscountName(product) {
 
 function isMmtBundleName(product) {
   const name = normalizeName(product);
-  return name.includes("per point on your order") || name.includes("order your on point per");
+  return (
+    name.includes("per point on your order") ||
+    name.includes("per order on your order") ||
+    name.includes("order your on point per") ||
+    name.includes("order your on order per")
+  );
 }
 
 function isReviewedOffer(row) {
@@ -592,7 +597,8 @@ function renderCalculationReview({ pdfQuantityTotal, offerQty, adt, at, uptBaseQ
 }
 
 function getOfferLabel(row) {
-  return isMmtBundleName(row.product) ? "100.01 per point on your order" : "on your order 100%";
+  if (!isMmtBundleName(row.product)) return "on your order 100%";
+  return normalizeName(row.product).includes("per order") ? "100.01 per order on your order" : "100.01 per point on your order";
 }
 
 function renderOfferRows() {
