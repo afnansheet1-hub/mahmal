@@ -135,11 +135,14 @@ h2 {
 }
 
 #pdfInput {
-  position: absolute;
+  position: fixed;
   inline-size: 1px;
   block-size: 1px;
-  opacity: 0;
-  pointer-events: none;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  opacity: 0.01;
+  pointer-events: auto;
+  clip-path: inset(50%);
 }
 
 .upload-button {

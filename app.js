@@ -77,6 +77,12 @@ function setOcrRetryVisible(visible) {
   els.ocrRetryButton.hidden = !visible;
 }
 
+function showExtractProgress(message) {
+  document.body.classList.add("has-report");
+  els.dailyExtract.textContent = message;
+  els.calculationReview.textContent = "جاري تجهيز تفاصيل الحساب بعد قراءة PDF.";
+}
+
 function resetEmptyState() {
   hasReport = false;
   offerReviewRows = [];
@@ -372,7 +378,11 @@ async function analyzePdf(source, name, options = {}) {
   const forceOcr = options.forceOcr || false;
   hasReport = false;
   setOcrRetryVisible(false);
-  if (!forceOcr) document.body.classList.remove("has-report");
+  showExtractProgress(`جاري تحليل ملف PDF...
+
+${name}
+
+سيظهر المستخرج اليومي هنا فور انتهاء القراءة.`);
   setStatus("جاري قراءة الصفحات واستخراج جدول المبيعات والمؤشرات التفصيلية...", "loading");
   els.fileName.textContent = name;
   els.previewLabel.textContent = "الصفحة الأولى";
@@ -914,11 +924,28 @@ function renderTable(products) {
   });
 }
 
+document.querySelectorAll('label[for="pdfInput"]').forEach((trigger) => {
+  trigger.addEventListener("click", (event) => {
+    event.preventDefault();
+    els.input.value = "";
+    els.input.click();
+  });
+});
+
+els.input.addEventListener("click", () => {
+  els.input.value = "";
+});
+
 els.input.addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
 
   try {
+    showExtractProgress(`تم اختيار الملف من الجوال.
+
+${file.name}
+
+جاري تجهيز الملف وقراءة جدول المبيعات...`);
     const bytes = await file.arrayBuffer();
     lastPdfBytes = bytes.slice(0);
     lastPdfName = file.name;
