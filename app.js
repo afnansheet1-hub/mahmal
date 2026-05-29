@@ -476,9 +476,7 @@ function extractDiscountBundleCounts(text) {
     discoveryWinter: rows
       .filter((row) => Math.abs(row.amount - 67.83) < 0.02)
       .reduce((sum, row) => sum + row.qty, 0),
-    magicD5: rows
-      .filter((row) => Math.abs(row.amount - 21.74) < 0.02 || Math.abs(row.amount / row.qty - 21.74) < 0.02)
-      .reduce((sum, row) => sum + row.qty, 0),
+    magicD5: 0,
     mmt: rows
       .filter((row) => Math.abs(row.amount - 100.01) < 0.02 || Math.abs(row.amount / row.qty - 100.01) < 0.02)
       .reduce((sum, row) => sum + row.qty, 0),
@@ -496,7 +494,7 @@ function extractDiscountBundleCountsFromRows(rows) {
       .filter((row) => Math.abs(Math.abs(row.amount) - 67.83) < 0.02 || Math.abs(Math.abs(row.amount / row.qty) - 67.83) < 0.02)
       .reduce((sum, row) => sum + row.qty, 0),
     magicD5: rows
-      .filter((row) => isOrderDiscountName(row.product))
+      .filter((row) => isOrder100DiscountName(row.product))
       .filter((row) => Math.abs(Math.abs(row.amount) - 21.74) < 0.02 || Math.abs(Math.abs(row.amount / row.qty) - 21.74) < 0.02)
       .reduce((sum, row) => sum + row.qty, 0),
     mmt: rows
