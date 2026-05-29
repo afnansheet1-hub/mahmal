@@ -283,6 +283,25 @@ h2 {
   cursor: pointer;
 }
 
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid rgba(7, 92, 84, 0.28);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--accent-strong);
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.secondary-button[hidden] {
+  display: none;
+}
+
 .tab-button.active,
 .copy-button {
   border-color: var(--accent-strong);
@@ -890,7 +909,8 @@ h1 {
 
 .upload-button,
 .tab-button,
-.copy-button {
+.copy-button,
+.secondary-button {
   transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 
@@ -996,10 +1016,217 @@ h1 {
 
 @media (max-width: 760px) {
   .app-shell {
-    width: min(100% - 20px, 1500px);
+    width: min(100% - 18px, 1500px);
+    padding-top: 10px;
+  }
+
+  body {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 247, 245, 0.94)),
+      url("./assets/match-logo-bg.webp") center 18px / min(420px, 88vw) auto no-repeat fixed,
+      var(--bg);
+  }
+
+  .hero {
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .hero-copy,
+  .hero-card {
+    min-height: auto;
+  }
+
+  .hero-copy {
+    padding: 18px 14px;
+  }
+
+  .hero-copy::before {
+    width: 220px;
+    height: 72px;
+    inset-inline-end: 12px;
+    top: 8px;
+    opacity: 0.13;
+  }
+
+  h1 {
+    font-size: 34px;
+    line-height: 1.15;
+  }
+
+  h2 {
+    font-size: 18px;
+  }
+
+  .hero-subtitle {
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .hero-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .report-pill,
+  .upload-button,
+  .secondary-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .hero-card {
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .hero-card strong {
+    font-size: 16px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  .status-block {
+    padding: 10px;
+    font-size: 12px;
   }
 
   .empty-state {
+    min-height: 260px;
+    margin-top: 10px;
+  }
+
+  .empty-card {
+    padding: 20px 14px;
+  }
+
+  .empty-mark {
+    width: 58px;
+    height: 58px;
+    margin-bottom: 12px;
+  }
+
+  .empty-card h2 {
+    font-size: 24px;
+  }
+
+  .empty-card p {
+    font-size: 13px;
+    line-height: 1.7;
+    margin-bottom: 16px;
+  }
+
+  .kpi-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .metric {
+    min-height: 86px;
+  }
+
+  .metric strong {
+    font-size: 24px;
+  }
+
+  .view-tabs {
+    width: 100%;
+  }
+
+  .tab-button,
+  .copy-button {
+    padding: 0 10px;
+    font-size: 13px;
+  }
+
+  .extract-layout,
+  .workspace {
+    gap: 12px;
+  }
+
+  .panel-heading {
+    gap: 8px;
+  }
+
+  .daily-extract {
+    min-height: 460px;
+    padding: 14px;
+    font-size: 15px;
+    line-height: 1.75;
+  }
+
+  .calc-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .offer-table,
+  .offer-table tbody,
+  .offer-table tr,
+  .offer-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .offer-table thead {
+    display: none;
+  }
+
+  .offer-table tr {
+    padding: 10px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .offer-table td {
+    border: 0;
+    padding: 4px 0;
+    text-align: right;
+    white-space: normal;
+  }
+
+  .offer-table td:nth-child(2),
+  .offer-table td:nth-child(3) {
+    direction: ltr;
+    text-align: left;
+  }
+
+  .pdf-preview {
+    height: auto;
     min-height: 360px;
+    max-height: 70vh;
+  }
+
+  .pdf-preview canvas {
+    max-width: 100%;
+  }
+
+}
+
+@media (max-width: 760px) {
+  .hero,
+  .workspace,
+  .extract-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hero-copy {
+    order: 1;
+  }
+
+  .hero-card {
+    order: 2;
+  }
+
+  .hero-copy,
+  .hero-card {
+    width: 100%;
+  }
+
+  .hero-actions {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 }

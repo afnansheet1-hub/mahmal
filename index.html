@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>لوحة تحليل تقارير المبيعات PDF</title>
-    <link rel="stylesheet" href="./styles.css?v=20260528-4" />
+    <link rel="stylesheet" href="./styles.css?v=20260529-2" />
   </head>
   <body>
     <main class="app-shell">
@@ -20,6 +20,7 @@
               <span aria-hidden="true">↑</span>
               اختيار ملف PDF
             </label>
+            <button id="ocrRetryButton" class="secondary-button" type="button" hidden>إعادة التحليل OCR</button>
             <input id="pdfInput" type="file" accept="application/pdf" />
             <span id="reportMeta" class="report-pill">بانتظار التقرير</span>
           </div>
@@ -231,6 +232,6 @@
       </section>
     </main>
 
-    <script type="module" src="./app.js?v=20260529-6"></script>
+    <script type="module" src="./app.js?v=20260529-7"></script>
   </body>
 </html>

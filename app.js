@@ -8,6 +8,7 @@ const els = {
   fileName: document.querySelector("#fileName"),
   statusDot: document.querySelector("#statusDot"),
   statusText: document.querySelector("#statusText"),
+  ocrRetryButton: document.querySelector("#ocrRetryButton"),
   pageCount: document.querySelector("#pageCount"),
   totalSales: document.querySelector("#totalSales"),
   totalQty: document.querySelector("#totalQty"),
@@ -64,10 +65,16 @@ let pdfGrandQuantityTotal = null;
 let lastPdfSalesTotal = 0;
 let lastPdfQtyTotal = 0;
 let hasReport = false;
+let lastPdfBytes = null;
+let lastPdfName = "";
 
 function setStatus(text, type = "ready") {
   els.statusText.textContent = text;
   els.statusDot.className = `status-dot ${type === "ready" ? "" : type}`;
+}
+
+function setOcrRetryVisible(visible) {
+  els.ocrRetryButton.hidden = !visible;
 }
 
 function resetEmptyState() {
@@ -94,6 +101,7 @@ function resetEmptyState() {
   els.calculationReview.textContent = "ستظهر تفاصيل حساب UPT بعد تحميل PDF.";
   els.offerRowsBody.innerHTML = "<tr><td colspan='3'>ستظهر عروض on your order هنا.</td></tr>";
   setStatus("ارفع ملف PDF لبدء التحليل وعرض القيم.", "ready");
+  setOcrRetryVisible(false);
 }
 
 function escapeHtml(value) {
@@ -290,10 +298,20 @@ async function renderPageToCanvas(page, scale = 2) {
   return canvas;
 }
 
+function getOcrScale(pdf) {
+  const isSmallDevice = window.matchMedia?.("(max-width: 760px)")?.matches || navigator.deviceMemory <= 4;
+  if (pdf.numPages > 8 || isSmallDevice) return 1.35;
+  if (pdf.numPages > 4) return 1.6;
+  return 2;
+}
+
 async function extractRowsWithOcr(pdf) {
   const { createWorker } = await import("./vendor/tesseract.esm.min.js");
-  const worker = await createWorker("eng", 1, {
-    workerPath: "./vendor/tesseract-worker.min.js",
+  const worker = await createWorker("eng+ara", 1, {
+    workerPath: new URL("./vendor/tesseract-worker.min.js", import.meta.url).href,
+    langPath: "https://tessdata.projectnaptha.com/4.0.0",
+    corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@v7.0.0",
+    gzip: true,
     logger: (message) => {
       if (message.status === "recognizing text") {
         setStatus(`PDF مصور: جاري قراءة النص بالـ OCR... ${Math.round((message.progress || 0) * 100)}%`, "loading");
@@ -303,11 +321,12 @@ async function extractRowsWithOcr(pdf) {
 
   const rows = [];
   const pageTexts = [];
+  const ocrScale = getOcrScale(pdf);
   try {
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       setStatus(`PDF مصور: تجهيز الصفحة ${pageNumber} من ${pdf.numPages} للقراءة...`, "loading");
       const page = await pdf.getPage(pageNumber);
-      const canvas = await renderPageToCanvas(page, 2);
+      const canvas = await renderPageToCanvas(page, ocrScale);
       const result = await worker.recognize(canvas);
       pageTexts.push(result.data.text);
       rows.push(...rowsFromOcrText(result.data.text));
@@ -340,6 +359,7 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
   renderDashboard(pdf.numPages, allProducts, latestPdfText, name);
   hasReport = true;
   document.body.classList.add("has-report");
+  setOcrRetryVisible(false);
   setStatus(
     usedOcr
       ? "تم تحليل PDF المصور باستخدام OCR. راجع جدول العروض والمستخرج للتأكد من الأرقام."
@@ -348,9 +368,11 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
   );
 }
 
-async function analyzePdf(source, name) {
+async function analyzePdf(source, name, options = {}) {
+  const forceOcr = options.forceOcr || false;
   hasReport = false;
-  document.body.classList.remove("has-report");
+  setOcrRetryVisible(false);
+  if (!forceOcr) document.body.classList.remove("has-report");
   setStatus("جاري قراءة الصفحات واستخراج جدول المبيعات والمؤشرات التفصيلية...", "loading");
   els.fileName.textContent = name;
   els.previewLabel.textContent = "الصفحة الأولى";
@@ -358,25 +380,27 @@ async function analyzePdf(source, name) {
   const loadingTask = pdfjsLib.getDocument(source);
   const pdf = await loadingTask.promise;
   await renderPreview(pdf);
-  const rows = [];
-  const pageTexts = [];
-  const rawPageTexts = [];
+  if (!forceOcr) {
+    const rows = [];
+    const pageTexts = [];
+    const rawPageTexts = [];
 
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-    const page = await pdf.getPage(pageNumber);
-    const content = await page.getTextContent();
-    rawPageTexts.push(content.items.map((item) => item.str).join("\n"));
-    const lines = groupItemsByLine(content.items);
-    pageTexts.push(lines.map((line) => line.text).join(" "));
-    for (const line of lines) {
-      const row = rowFromLine(line);
-      if (row) rows.push(row);
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+      rawPageTexts.push(content.items.map((item) => item.str).join("\n"));
+      const lines = groupItemsByLine(content.items);
+      pageTexts.push(lines.map((line) => line.text).join(" "));
+      for (const line of lines) {
+        const row = rowFromLine(line);
+        if (row) rows.push(row);
+      }
     }
-  }
 
-  if (mergeContinuationRows(rows).length) {
-    applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr: false });
-    return;
+    if (mergeContinuationRows(rows).length) {
+      applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr: false });
+      return;
+    }
   }
 
   setStatus("لم أجد نصًا كافيًا داخل PDF. سأحاول قراءة الملف كصورة باستخدام OCR...", "loading");
@@ -896,10 +920,27 @@ els.input.addEventListener("change", async (event) => {
 
   try {
     const bytes = await file.arrayBuffer();
+    lastPdfBytes = bytes.slice(0);
+    lastPdfName = file.name;
     await analyzePdf({ data: bytes }, file.name);
   } catch (error) {
     console.error(error);
-    setStatus("تعذر تحليل الملف حتى بعد محاولة OCR. جرّب إعادة تصدير PDF بجودة أوضح ثم ارفعه مرة أخرى.", "error");
+    setOcrRetryVisible(Boolean(lastPdfBytes));
+    document.body.classList.add("has-report");
+    setStatus(`تعذر تحليل الملف. السبب: ${error?.message || "غير معروف"}. جرّب زر إعادة التحليل OCR أو أعد تصدير PDF بجودة أوضح.`, "error");
+  }
+});
+
+els.ocrRetryButton.addEventListener("click", async () => {
+  if (!lastPdfBytes) return;
+
+  try {
+    await analyzePdf({ data: lastPdfBytes.slice(0) }, lastPdfName || "PDF", { forceOcr: true });
+  } catch (error) {
+    console.error(error);
+    setOcrRetryVisible(true);
+    document.body.classList.add("has-report");
+    setStatus(`فشل OCR أيضًا. السبب: ${error?.message || "غير معروف"}. جرّب PDF أوضح أو افتح الملف ثم صدّره PDF من جديد.`, "error");
   }
 });
 
