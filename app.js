@@ -113,18 +113,27 @@ function cleanText(value) {
     .trim();
 }
 
+function normalizeDigits(value) {
+  return String(value)
+    .replace(/[٠-٩]/g, (digit) => "٠١٢٣٤٥٦٧٨٩".indexOf(digit))
+    .replace(/[۰-۹]/g, (digit) => "۰۱۲۳۴۵۶۷۸۹".indexOf(digit))
+    .replace(/[−–—]/g, "-")
+    .replace(/٫/g, ".")
+    .replace(/٬/g, ",");
+}
+
 function parseAmount(value) {
-  const match = value.replace(/[﷼]/g, "").match(/-?\s*[\d,]+\.\d{2}/);
+  const match = normalizeDigits(value).replace(/[﷼]/g, "").match(/-?\s*[\d,]+\.\d{2}/);
   return match ? Number(match[0].replace(/\s|,/g, "")) : null;
 }
 
 function parseQty(value) {
-  const match = value.match(/(?:^|\s)(\d+(?:\.\d)?)(?:\s|$)/);
+  const match = normalizeDigits(value).match(/(?:^|\s)(\d+(?:\.\d)?)(?:\s|$)/);
   return match ? Number(match[1]) : null;
 }
 
 function extractBarcode(value) {
-  const match = value.match(/\[\s*(\d{8,})\s*\]|\]\s*(\d{8,})\s*\[|(\d{8,})/);
+  const match = normalizeDigits(value).match(/\[\s*(\d{8,})\s*\]|\]\s*(\d{8,})\s*\[|(\d{8,})/);
   return match ? match[1] || match[2] || match[3] : "";
 }
 
@@ -188,6 +197,59 @@ function rowFromLine(line) {
   return { product, barcode, qty, amount, unitPrice: amount / qty, rawText: text };
 }
 
+function rowFromText(text) {
+  const normalizedText = normalizeDigits(text).replace(/\s+/g, " ").trim();
+  const amount = parseAmount(normalizedText);
+  const barcode = extractBarcode(normalizedText);
+  const qtyCandidates = [...normalizedText.matchAll(/(?:^|\s)(\d+(?:\.\d)?)(?:\s|$)/g)]
+    .map((match) => Number(match[1]))
+    .filter((value) => value !== null && value < 10000 && (!amount || Math.abs(value - amount) > 0.01));
+  const filteredQty = /100\s*%/.test(normalizedText) ? qtyCandidates.filter((value) => Math.abs(value - 100) > 0.01) : qtyCandidates;
+  const qty = filteredQty[0] ?? qtyCandidates[0] ?? null;
+
+  if (amount === null || qty === null) {
+    return null;
+  }
+
+  let product = cleanText(normalizedText)
+    .replace(/-?\s*[\d,]+\.\d{2}/g, "")
+    .replace(/\b\d{8,}\b/g, "")
+    .replace(/\b\d+(?:\.\d)?\b/g, "")
+    .replace(/\b(?:units?|each|Perfume)\b/gi, "")
+    .trim();
+
+  if (!product || product.length < 3) {
+    return null;
+  }
+
+  product = product.replace(/\s+/g, " ");
+  return { product, barcode, qty, amount, unitPrice: amount / qty, rawText: normalizedText };
+}
+
+function rowsFromOcrText(text) {
+  const lines = normalizeDigits(text)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const rows = [];
+  const seen = new Set();
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const candidates = [
+      lines[index],
+      `${lines[index]} ${lines[index + 1] || ""}`.trim(),
+      `${lines[index]} ${lines[index + 1] || ""} ${lines[index + 2] || ""}`.trim(),
+    ];
+    const row = candidates.map((candidate) => rowFromText(candidate)).find(Boolean);
+    if (row && !seen.has(row.rawText)) {
+      seen.add(row.rawText);
+      rows.push(row);
+    }
+  }
+
+  return rows;
+}
+
 function mergeContinuationRows(rows) {
   return rows
     .filter((row) => row.barcode)
@@ -216,6 +278,76 @@ function extractPdfGrandQuantityTotal(rows) {
   return fallbackRows[0]?.qty ?? null;
 }
 
+async function renderPageToCanvas(page, scale = 2) {
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  canvas.width = Math.floor(viewport.width);
+  canvas.height = Math.floor(viewport.height);
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: context, viewport }).promise;
+  return canvas;
+}
+
+async function extractRowsWithOcr(pdf) {
+  const { createWorker } = await import("./vendor/tesseract.esm.min.js");
+  const worker = await createWorker("eng", 1, {
+    workerPath: "./vendor/tesseract-worker.min.js",
+    logger: (message) => {
+      if (message.status === "recognizing text") {
+        setStatus(`PDF مصور: جاري قراءة النص بالـ OCR... ${Math.round((message.progress || 0) * 100)}%`, "loading");
+      }
+    },
+  });
+
+  const rows = [];
+  const pageTexts = [];
+  try {
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      setStatus(`PDF مصور: تجهيز الصفحة ${pageNumber} من ${pdf.numPages} للقراءة...`, "loading");
+      const page = await pdf.getPage(pageNumber);
+      const canvas = await renderPageToCanvas(page, 2);
+      const result = await worker.recognize(canvas);
+      pageTexts.push(result.data.text);
+      rows.push(...rowsFromOcrText(result.data.text));
+    }
+  } finally {
+    await worker.terminate();
+  }
+
+  return { rows, pageTexts, rawPageTexts: pageTexts };
+}
+
+function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }) {
+  if (!rows.length) {
+    throw new Error("No analyzable rows found");
+  }
+
+  latestPdfText = pageTexts.join("\n");
+  offerReviewRows = rows.filter((row) => isReviewedOffer(row));
+  offerDiscountQuantityTotal = offerReviewRows.reduce((sum, row) => sum + row.qty, 0);
+  pdfGrandQuantityTotal = extractPdfGrandQuantityTotal(rows);
+  allExtractProducts = mergeContinuationRows(rows);
+  allProducts = allExtractProducts.filter((row) => row.amount > 0);
+  aiPdfTotalQty = null;
+  aiOfferDiscountQty = null;
+  discountBundleCounts = mergeDiscountBundleCounts(
+    extractDiscountBundleCounts(rawPageTexts.join("\n")),
+    extractDiscountBundleCountsFromRows(rows),
+  );
+  mappedDailyQuantities = extractMappedDailyQuantities(latestPdfText);
+  renderDashboard(pdf.numPages, allProducts, latestPdfText, name);
+  hasReport = true;
+  document.body.classList.add("has-report");
+  setStatus(
+    usedOcr
+      ? "تم تحليل PDF المصور باستخدام OCR. راجع جدول العروض والمستخرج للتأكد من الأرقام."
+      : "تم تحليل التقرير بنجاح. الواجهة تعرض الآن مؤشرات تفصيلية قابلة للبحث والمراجعة.",
+    "ready",
+  );
+}
+
 async function analyzePdf(source, name) {
   hasReport = false;
   document.body.classList.remove("has-report");
@@ -242,23 +374,14 @@ async function analyzePdf(source, name) {
     }
   }
 
-  latestPdfText = pageTexts.join("\n");
-  offerReviewRows = rows.filter((row) => isReviewedOffer(row));
-  offerDiscountQuantityTotal = offerReviewRows.reduce((sum, row) => sum + row.qty, 0);
-  pdfGrandQuantityTotal = extractPdfGrandQuantityTotal(rows);
-  allExtractProducts = mergeContinuationRows(rows);
-  allProducts = allExtractProducts.filter((row) => row.amount > 0);
-  aiPdfTotalQty = null;
-  aiOfferDiscountQty = null;
-  discountBundleCounts = mergeDiscountBundleCounts(
-    extractDiscountBundleCounts(rawPageTexts.join("\n")),
-    extractDiscountBundleCountsFromRows(rows),
-  );
-  mappedDailyQuantities = extractMappedDailyQuantities(latestPdfText);
-  renderDashboard(pdf.numPages, allProducts, latestPdfText, name);
-  hasReport = true;
-  document.body.classList.add("has-report");
-  setStatus("تم تحليل التقرير بنجاح. الواجهة تعرض الآن مؤشرات تفصيلية قابلة للبحث والمراجعة.", "ready");
+  if (mergeContinuationRows(rows).length) {
+    applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr: false });
+    return;
+  }
+
+  setStatus("لم أجد نصًا كافيًا داخل PDF. سأحاول قراءة الملف كصورة باستخدام OCR...", "loading");
+  const ocrResult = await extractRowsWithOcr(pdf);
+  applyAnalysisRows({ ...ocrResult, pdf, name, usedOcr: true });
 }
 
 async function renderPreview(pdf) {
@@ -776,7 +899,7 @@ els.input.addEventListener("change", async (event) => {
     await analyzePdf({ data: bytes }, file.name);
   } catch (error) {
     console.error(error);
-    setStatus("تعذر تحليل الملف. تأكد أن الملف PDF نصي وليس صورة ممسوحة فقط.", "error");
+    setStatus("تعذر تحليل الملف حتى بعد محاولة OCR. جرّب إعادة تصدير PDF بجودة أوضح ثم ارفعه مرة أخرى.", "error");
   }
 });
 
