@@ -813,7 +813,7 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const makeupSales = sumAmountByBarcodes(countProducts, makeupBarcodes);
   const tawziyatBoxSolo = sumQtyByMappedProduct(countProducts, "tawziyatBoxSolo");
 
-  currentExtractText = `● ALMAHMAL ●
+  currentExtractText = `● اسم الفرع ●
 
 ${formatDateForExtract(date)}
 
