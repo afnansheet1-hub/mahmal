@@ -813,36 +813,38 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const makeupSales = sumAmountByBarcodes(countProducts, makeupBarcodes);
   const tawziyatBoxSolo = sumQtyByMappedProduct(countProducts, "tawziyatBoxSolo");
 
-  currentExtractText = `● اسم الفرع ●
+  currentExtractText = `Store Name:
 
 ${formatDateForExtract(date)}
 
-- Sales : ${formatPlainMoney(salesForAdt)}
-- ADT : ${formatPlainNumber(adt)}
-- AT : ${formatPlainNumber(at)}
-- UPT : ${formatPlainNumber(upt)}
-- Cash : N/A
-------------------
-- Pinkoctober :${formatPlainNumber(pink)}
-- Musk collection :${formatPlainNumber(muskCollection)}
-- Bundle (P+M) :${formatPlainNumber(pinkMuskBundle)}
-------------------
-- Discovery Black :${formatPlainNumber(discoveryBlack)}
-- Winter collection :${formatPlainNumber(winterCollection)}
-- Bundle ( D + W) :${formatPlainNumber(discoveryWinterBundle)}
-------------------
-- Magic of Layering : ${formatPlainNumber(magicLayering)}
-- D5 Box :${formatPlainNumber(d5Box)}
-- Bundle(M+D) : ${formatPlainNumber(magicD5Bundle)}
-------------------
-- Tawziat collection :${formatPlainNumber(tawziat)}
-- MMT Bundle : ${formatPlainNumber(mmtBundle)}
-------------------
-- MAKEUP SALES  : ${makeupSales ? formatPlainMoney(makeupSales) : "0"}
-Tawziyat Box solo : ${formatPlainNumber(tawziyatBoxSolo)}
-------------------
-- Jahez sales  : N/A
-- ADT :N/A`;
+Sales : ${formatPlainMoney(salesForAdt)}
+ADT : ${formatPlainNumber(adt)}
+AT : ${formatPlainNumber(at)}
+UPT: ${formatPlainNumber(upt)}
+Cash : N/A
+-----------------
+Pinkoctober:${formatPlainNumber(pink)}
+Musk collection:${formatPlainNumber(muskCollection)}
+Winter collection:${formatPlainNumber(winterCollection)}
+Magic of Layering:${formatPlainNumber(magicLayering)}
+Tawziat collection:${formatPlainNumber(tawziat)}
+D1:0
+D4:${formatPlainNumber(discoveryBlack)}
+D5:${formatPlainNumber(d5Box)}
+------------------—
+Musk+Mag+Taw Bundle:${formatPlainNumber(mmtBundle)}
+Pink+Musk Bundle:${formatPlainNumber(pinkMuskBundle)}
+W+D4+Angel Bundle:${formatPlainNumber(discoveryWinterBundle)}
+Magic+D5 Bundle:${formatPlainNumber(magicD5Bundle)}
+Vintage Bundle:0
+Vibes Bundle:0
+------------------—
+———————————
+*MAKEUP:${makeupSales ? formatPlainMoney(makeupSales) : "0"}
+———————————
+JAHEZ : N/A
+JAHEZ ADT : N/A
+———————————`;
 
   els.dailyExtract.textContent = currentExtractText;
   renderCalculationReview({ pdfQuantityTotal, offerQty: offerDiscountQuantityTotal, adt, at, uptBaseQty, upt });
