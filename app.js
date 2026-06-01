@@ -840,7 +840,7 @@ Vintage Bundle:0
 Vibes Bundle:0
 ------------------—
 ———————————
-*MAKEUP:${makeupSales ? formatPlainMoney(makeupSales) : "0"}
+*MAKEUP: ${makeupSales ? formatPlainMoney(makeupSales) : "0"}
 ———————————
 JAHEZ : N/A
 JAHEZ ADT : N/A
