@@ -5,6 +5,7 @@ if (!pdfjsLib) {
 }
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = "./vendor/pdf.legacy.worker.min.js";
+const allowExternalOcrResources = false;
 
 const defaultPdfName = "تفاصيل المبيعات (3).pdf";
 const els = {
@@ -253,8 +254,12 @@ function rowFromLine(line) {
   const qtyItems = line.items
     .map((item) => ({ value: parseQty(item.text), x: item.x, text: item.text }))
     .filter((item) => item.value !== null && item.value < 10000 && (!amount || Math.abs(item.value - amount) > 0.01));
-  const lastQtyItem = qtyItems.length ? qtyItems[qtyItems.length - 1] : null;
-  const qty = (barcode ? lastQtyItem?.value : qtyItems[0]?.value) ?? null;
+  const filteredQtyItems = /100\s*%/.test(text)
+    ? qtyItems.filter((item) => Math.abs(item.value - 100) > 0.01)
+    : qtyItems;
+  const qtySourceItems = filteredQtyItems.length ? filteredQtyItems : qtyItems;
+  const lastQtyItem = qtySourceItems.length ? qtySourceItems[qtySourceItems.length - 1] : null;
+  const qty = (barcode ? lastQtyItem?.value : qtySourceItems[0]?.value) ?? null;
 
   if (amount === null || qty === null) {
     return null;
@@ -380,6 +385,10 @@ function getOcrScale(pdf) {
 }
 
 async function createOcrWorker(options) {
+  if (!allowExternalOcrResources) {
+    throw new Error("OCR external resources are disabled for privacy");
+  }
+
   const tesseractModule = await import("./vendor/tesseract.esm.min.js");
   const tesseract = tesseractModule.default || tesseractModule;
   const createWorker =
@@ -397,8 +406,6 @@ async function createOcrWorker(options) {
 async function extractRowsWithOcr(pdf) {
   const worker = await createOcrWorker({
     workerPath: new URL("./vendor/tesseract-worker.min.js", import.meta.url).href,
-    langPath: "https://tessdata.projectnaptha.com/4.0.0",
-    corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@v7.0.0",
     gzip: true,
     logger: (message) => {
       if (message.status === "recognizing text") {
@@ -633,6 +640,13 @@ function discountUnitMatches(row, target) {
   return row.qty ? Math.abs(Math.abs(row.amount / row.qty) - target) < 0.02 : false;
 }
 
+function isMmtBundleDiscount(row) {
+  return (
+    isMmtBundleName(row.product) ||
+    (isOrder100DiscountName(row.product) && (discountUnitMatches(row, 100) || discountUnitMatches(row, 100.01)))
+  );
+}
+
 function sumQtyByKeywords(products, keywords) {
   return products
     .filter((row) => {
@@ -725,10 +739,31 @@ function extractMappedDailyQuantities(text) {
   return quantities;
 }
 
+function extractDiscountRowsNearOfferName(text, offerName) {
+  const rows = [];
+  const pattern = new RegExp(`${offerName}[\\s\\S]{0,180}`, "gi");
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    const segment = match[0];
+    const qtyMatch = [...segment.matchAll(/\b(\d+(?:\.\d+)?)\b(?!\s*%)/g)]
+      .map((candidate) => Number(candidate[1]))
+      .find((value) => Math.abs(value - 100) > 0.01 && Math.abs(value - 100.01) > 0.01);
+    const amountMatches = segment.match(/[-−–—]?\s*[\d,]+\.\d{2}/g) || [];
+    const amountMatch = amountMatches.find((value) => value.trim().startsWith("-")) || amountMatches[0];
+    if (!qtyMatch || !amountMatch) continue;
+    rows.push({
+      qty: qtyMatch,
+      amount: Number(amountMatch.replace(/[−–—]/g, "-").replace(/\s|,/g, "")),
+    });
+  }
+  return rows;
+}
+
 function extractDiscountBundleCounts(text) {
   const rows = [];
-  const normalized = text.replace(/\u200b/g, " ");
-  const offerName = "(?:on\\s+your\\s+order\\s+100%|(?:100\\.01\\s*)?per\\s+point\\s+on\\s+your\\s+order|(?:100\\.01\\s*)?per\\s+order\\s+on\\s+your\\s+order)";
+  const normalized = normalizeDigits(text).replace(/\u200b/g, " ");
+  const offerName = "(?:on\\s+your\\s+order\\s+100\\s*%|(?:100\\.01\\s*)?per\\s+point\\s+on\\s+your\\s+order|(?:100\\.01\\s*)?per\\s+order\\s+on\\s+your\\s+order)";
+  rows.push(...extractDiscountRowsNearOfferName(normalized, offerName));
   const productFirst = new RegExp(`${offerName}[\\s\\S]{0,80}?(\\d+(?:\\.\\d+)?)\\s*تاﺪﺣﻮﻟا[\\s\\S]{0,80}?-\\s*([\\d,]+\\.\\d{2})`, "g");
   const amountFirst = new RegExp(`-\\s*([\\d,]+\\.\\d{2})[\\s\\S]{0,80}?(\\d+(?:\\.\\d+)?)\\s*تاﺪﺣﻮﻟا[\\s\\S]{0,80}?${offerName}`, "g");
   let match;
@@ -738,16 +773,17 @@ function extractDiscountBundleCounts(text) {
   while ((match = amountFirst.exec(normalized)) !== null) {
     rows.push({ qty: Number(match[2]), amount: Number(match[1].replace(/,/g, "")) });
   }
+  const uniqueRows = [...new Map(rows.map((row) => [`${row.qty}:${Math.round(Math.abs(row.amount) * 100)}`, row])).values()];
   return {
-    pinkMusk: rows
+    pinkMusk: uniqueRows
       .filter((row) => discountUnitMatches(row, 46.09))
       .reduce((sum, row) => sum + row.qty, 0),
-    discoveryWinter: rows
+    discoveryWinter: uniqueRows
       .filter((row) => discountUnitMatches(row, 67.83))
       .reduce((sum, row) => sum + row.qty, 0),
     magicD5: 0,
-    mmt: rows
-      .filter((row) => discountUnitMatches(row, 100.01))
+    mmt: uniqueRows
+      .filter((row) => discountUnitMatches(row, 100) || discountUnitMatches(row, 100.01))
       .reduce((sum, row) => sum + row.qty, 0),
   };
 }
@@ -767,7 +803,7 @@ function extractDiscountBundleCountsFromRows(rows) {
       .filter((row) => discountUnitMatches(row, 21.74))
       .reduce((sum, row) => sum + row.qty, 0),
     mmt: rows
-      .filter((row) => isMmtBundleName(row.product))
+      .filter((row) => isMmtBundleDiscount(row))
       .reduce((sum, row) => sum + row.qty, 0),
   };
 }
@@ -807,7 +843,7 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const magicD5Bundle = discountBundleCounts.magicD5 ?? 0;
   const tawziat = sumQtyByMappedProduct(countProducts, "tawziatCollection");
   const mmtBundleFromOffers = offerReviewRows
-    .filter((row) => isMmtBundleName(row.product))
+    .filter((row) => isMmtBundleDiscount(row))
     .reduce((sum, row) => sum + row.qty, 0);
   const mmtBundle = Math.max(discountBundleCounts.mmt ?? 0, mmtBundleFromOffers);
   const makeupSales = sumAmountByBarcodes(countProducts, makeupBarcodes);
@@ -1124,36 +1160,8 @@ els.copyExtract.addEventListener("click", async () => {
   }, 1400);
 });
 
-function notifySiteVisit() {
-  const storageKey = "matchVisitNotificationSent";
-  try {
-    if (window.sessionStorage?.getItem(storageKey) === "1") return;
-    window.sessionStorage?.setItem(storageKey, "1");
-  } catch (error) {
-    // Ignore private-mode storage errors; the notification can still be sent.
-  }
-
-  const payload = {
-    path: `${window.location.pathname}${window.location.search}`,
-    referrer: document.referrer || "مباشر",
-    userAgent: navigator.userAgent,
-    language: navigator.language,
-    screen: `${window.screen?.width || "-"}x${window.screen?.height || "-"}`,
-  };
-
-  window
-    .fetch("/api/visit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      keepalive: true,
-    })
-    .catch(() => {});
-}
-
 async function boot() {
   resetEmptyState();
-  notifySiteVisit();
 }
 
 boot();
