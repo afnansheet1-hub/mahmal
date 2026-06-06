@@ -657,6 +657,10 @@ function sumQtyByKeywords(products, keywords) {
 }
 
 const dailyProductMap = {
+  d1Box: {
+    barcodes: ["6287020283673"],
+    names: [],
+  },
   discoveryBlack: {
     barcodes: ["6287020284793"],
     names: ["match collection match discovery set d4"],
@@ -842,6 +846,7 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const d5Box = sumQtyByMappedProduct(countProducts, "d5Box");
   const magicD5Bundle = discountBundleCounts.magicD5 ?? 0;
   const tawziat = sumQtyByMappedProduct(countProducts, "tawziatCollection");
+  const d1Box = sumQtyByMappedProduct(countProducts, "d1Box");
   const mmtBundleFromOffers = offerReviewRows
     .filter((row) => isMmtBundleDiscount(row))
     .reduce((sum, row) => sum + row.qty, 0);
@@ -864,7 +869,7 @@ Musk collection:${formatPlainNumber(muskCollection)}
 Winter collection:${formatPlainNumber(winterCollection)}
 Magic of Layering:${formatPlainNumber(magicLayering)}
 Tawziat collection:${formatPlainNumber(tawziat)}
-D1:0
+D1:${formatPlainNumber(d1Box)}
 D4:${formatPlainNumber(discoveryBlack)}
 D5:${formatPlainNumber(d5Box)}
 ------------------—
