@@ -640,10 +640,18 @@ function discountUnitMatches(row, target) {
   return row.qty ? Math.abs(Math.abs(row.amount / row.qty) - target) < 0.02 : false;
 }
 
+function discountAmountMultipleMatches(row, target) {
+  const amount = Math.abs(row.amount || 0);
+  if (!amount || !target) return false;
+  const remainder = amount % target;
+  return remainder < 0.02 || Math.abs(target - remainder) < 0.02;
+}
+
 function isMmtBundleDiscount(row) {
   return (
     isMmtBundleName(row.product) ||
-    (isOrder100DiscountName(row.product) && (discountUnitMatches(row, 100) || discountUnitMatches(row, 100.01)))
+    (isOrder100DiscountName(row.product) &&
+      (discountUnitMatches(row, 100) || discountUnitMatches(row, 100.01) || discountAmountMultipleMatches(row, 100)))
   );
 }
 
