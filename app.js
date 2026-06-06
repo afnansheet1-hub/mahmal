@@ -655,6 +655,13 @@ function isMmtBundleDiscount(row) {
   );
 }
 
+function getMmtBundleUnits(row) {
+  if (isOrder100DiscountName(row.product) && discountAmountMultipleMatches(row, 100)) {
+    return Math.round(Math.abs(row.amount) / 100);
+  }
+  return row.qty;
+}
+
 function sumQtyByKeywords(products, keywords) {
   return products
     .filter((row) => {
@@ -796,7 +803,7 @@ function extractDiscountBundleCounts(text) {
     magicD5: 0,
     mmt: uniqueRows
       .filter((row) => discountUnitMatches(row, 100) || discountUnitMatches(row, 100.01))
-      .reduce((sum, row) => sum + row.qty, 0),
+      .reduce((sum, row) => sum + getMmtBundleUnits(row), 0),
   };
 }
 
@@ -816,7 +823,7 @@ function extractDiscountBundleCountsFromRows(rows) {
       .reduce((sum, row) => sum + row.qty, 0),
     mmt: rows
       .filter((row) => isMmtBundleDiscount(row))
-      .reduce((sum, row) => sum + row.qty, 0),
+      .reduce((sum, row) => sum + getMmtBundleUnits(row), 0),
   };
 }
 
@@ -857,7 +864,7 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const d1Box = sumQtyByMappedProduct(countProducts, "d1Box");
   const mmtBundleFromOffers = offerReviewRows
     .filter((row) => isMmtBundleDiscount(row))
-    .reduce((sum, row) => sum + row.qty, 0);
+    .reduce((sum, row) => sum + getMmtBundleUnits(row), 0);
   const mmtBundle = Math.max(discountBundleCounts.mmt ?? 0, mmtBundleFromOffers);
   const makeupSales = sumAmountByBarcodes(countProducts, makeupBarcodes);
   const tawziyatBoxSolo = sumQtyByMappedProduct(countProducts, "tawziyatBoxSolo");
