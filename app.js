@@ -66,6 +66,7 @@ let discountBundleCounts = {
 };
 let offerReviewRows = [];
 let offerDiscountQuantityTotal = 0;
+let offerCategorySummary = null;
 let pdfGrandQuantityTotal = null;
 let lastPdfSalesTotal = 0;
 let lastPdfQtyTotal = 0;
@@ -149,6 +150,7 @@ function resetEmptyState() {
   hasReport = false;
   offerReviewRows = [];
   offerDiscountQuantityTotal = 0;
+  offerCategorySummary = null;
   pdfGrandQuantityTotal = null;
   document.body.classList.remove("has-report");
   els.fileName.textContent = "لم يتم تحميل ملف";
@@ -196,6 +198,76 @@ function normalizeDigits(value) {
     .replace(/[−–—]/g, "-")
     .replace(/٫/g, ".")
     .replace(/٬/g, ",");
+}
+
+function textIndicatesReturnList(value) {
+  const text = normalizeDigits(value).toLowerCase();
+  return (
+    /refund|returned?|return\s+items?|refund\s+items?/i.test(text) ||
+    /مرتجع|مرتجعات|مسترجع|مسترجعات|استرجاع|استرداد/.test(text) ||
+    /\u0645\u0631\u062a\u062c\u0639|\u0645\u0631\u062a\u062c\u0639\u0627\u062a|\u0645\u0633\u062a\u0631\u062c\u0639|\u0645\u0633\u062a\u0631\u062c\u0639\u0627\u062a|\u0627\u0633\u062a\u0631\u062c\u0627\u0639|\u0627\u0633\u062a\u0631\u062f\u0627\u062f/.test(text)
+  );
+}
+
+function textIndicatesReturnHeading(value) {
+  const text = normalizeDigits(value);
+  return /\u0627\u0644\u0627\u0633\u062a\u0631\u062f\u0627\u062f\u0627\u062a|\u0636\u0631\u0627\u0626\u0628\s+\u0627\u0633\u062a\u0631\u062f\u0627\u062f\s+\u0627\u0644\u0623\u0645\u0648\u0627\u0644|\u0627\u0644\u062f\u0641\u0639\u0627\u062a/.test(text);
+}
+
+function textHasReturnedQuantity(value) {
+  const text = normalizeDigits(value);
+  return /(?:^|\s)(?:-\s*\d+(?:\.\d)?|\d+(?:\.\d)?\s*-)(?=\s|$)/.test(text);
+}
+
+function countReturnedQuantityMarkers(value) {
+  const text = normalizeDigits(value);
+  return (text.match(/(?:^|\s)(?:-\s*\d+(?:\.\d)?|\d+(?:\.\d)?\s*-)(?=\s|$)/g) || []).length;
+}
+
+function textLooksLikeReturnList(value) {
+  const text = normalizeDigits(value);
+  return textIndicatesReturnList(text) || textIndicatesReturnHeading(text) || countReturnedQuantityMarkers(text) >= 3;
+}
+
+function rowsLookLikeReturnList(rows) {
+  const returnedProductRows = rows.filter((row) => row.barcode && row.amount < 0).length;
+  const returnedOfferRows = rows.filter((row) => isOrderDiscountName(row.product) && (row.amount > 0 || textHasReturnedQuantity(row.rawText))).length;
+  return returnedProductRows >= 2 || (returnedProductRows >= 1 && returnedOfferRows >= 1);
+}
+
+function pageLooksLikeReturnList(text, rows = []) {
+  return textLooksLikeReturnList(text) || rowsLookLikeReturnList(rows);
+}
+
+function rowLooksReturned(row) {
+  return row.isReturnList || textHasReturnedQuantity(`${row.rawText || ""} ${row.product || ""}`);
+}
+
+function markReturnListRows(rows, pageTexts = [], rawPageTexts = []) {
+  const returnPages = new Set();
+  const pageCount = Math.max(pageTexts.length, rawPageTexts.length);
+  for (let index = 0; index < pageCount; index += 1) {
+    const text = `${rawPageTexts[index] || ""}\n${pageTexts[index] || ""}`;
+    if (pageLooksLikeReturnList(text)) returnPages.add(index);
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    isReturnList:
+      returnPages.has(row.pageIndex) ||
+      textLooksLikeReturnList(`${row.rawText || ""} ${row.product || ""}`) ||
+      textHasReturnedQuantity(`${row.rawText || ""} ${row.product || ""}`),
+  }));
+}
+
+function analysisSourceText(pageTexts = [], rawPageTexts = []) {
+  const pageCount = Math.max(pageTexts.length, rawPageTexts.length);
+  const pages = [];
+  for (let index = 0; index < pageCount; index += 1) {
+    const text = `${rawPageTexts[index] || ""}\n${pageTexts[index] || ""}`;
+    if (!pageLooksLikeReturnList(text)) pages.push(text);
+  }
+  return pages.join("\n");
 }
 
 function parseAmount(value) {
@@ -314,7 +386,7 @@ function rowFromText(text) {
   return { product, barcode, qty, amount, unitPrice: amount / qty, rawText: normalizedText };
 }
 
-function rowsFromOcrText(text) {
+function rowsFromOcrText(text, pageIndex = null) {
   const lines = normalizeDigits(text)
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -330,6 +402,7 @@ function rowsFromOcrText(text) {
     ];
     const row = candidates.map((candidate) => rowFromText(candidate)).find(Boolean);
     if (row && !seen.has(row.rawText)) {
+      row.pageIndex = pageIndex;
       seen.add(row.rawText);
       rows.push(row);
     }
@@ -363,6 +436,24 @@ function extractPdfGrandQuantityTotal(rows) {
     .filter((row) => !row.barcode && row.amount > 0 && row.qty > 0 && !isOfferDiscount(row))
     .sort((a, b) => b.qty - a.qty);
   return fallbackRows[0]?.qty ?? null;
+}
+
+function isUnclassifiedDiscountSummary(row) {
+  const text = `${row.rawText || ""} ${row.product || ""}`;
+  return (
+    !row.barcode &&
+    Number.isFinite(row.amount) &&
+    row.amount < 0 &&
+    !rowLooksReturned(row) &&
+    row.qty > 0 &&
+    /\u063a\s*\u064a\s*\u0631/.test(text)
+  );
+}
+
+function extractOfferCategorySummary(rows) {
+  const candidates = rows.filter(isUnclassifiedDiscountSummary);
+  if (!candidates.length) return null;
+  return candidates.reduce((best, row) => (row.qty > best.qty ? row : best), candidates[0]);
 }
 
 async function renderPageToCanvas(page, scale = 2) {
@@ -423,8 +514,12 @@ async function extractRowsWithOcr(pdf) {
       const page = await pdf.getPage(pageNumber);
       const canvas = await renderPageToCanvas(page, ocrScale);
       const result = await worker.recognize(canvas);
+      const pageRows = rowsFromOcrText(result.data.text);
+      if (pageLooksLikeReturnList(result.data.text, pageRows)) continue;
+
+      const analysisPageIndex = pageTexts.length;
       pageTexts.push(result.data.text);
-      rows.push(...rowsFromOcrText(result.data.text));
+      rows.push(...pageRows.map((row) => ({ ...row, pageIndex: analysisPageIndex })));
     }
   } finally {
     await worker.terminate();
@@ -438,20 +533,25 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
     throw new Error("No analyzable rows found");
   }
 
-  latestPdfText = pageTexts.join("\n");
-  offerReviewRows = rows.filter((row) => isReviewedOffer(row));
-  offerDiscountQuantityTotal = offerReviewRows.reduce((sum, row) => sum + row.qty, 0);
-  pdfGrandQuantityTotal = extractPdfGrandQuantityTotal(rows);
-  allExtractProducts = mergeContinuationRows(rows);
+  rows = markReturnListRows(rows, pageTexts, rawPageTexts);
+  const analysisRows = rows.filter((row) => !rowLooksReturned(row));
+  latestPdfText = analysisSourceText(pageTexts, rawPageTexts);
+  offerReviewRows = analysisRows.filter((row) => isReviewedOffer(row));
+  offerCategorySummary = extractOfferCategorySummary(analysisRows);
+  const reviewedOfferQuantityTotal = offerReviewRows.reduce((sum, row) => sum + getReviewedOfferUnits(row), 0);
+  offerDiscountQuantityTotal = offerCategorySummary?.qty ?? reviewedOfferQuantityTotal;
+  pdfGrandQuantityTotal = extractPdfGrandQuantityTotal(analysisRows);
+  allExtractProducts = mergeContinuationRows(analysisRows);
   allProducts = allExtractProducts.filter((row) => row.amount > 0);
   aiPdfTotalQty = null;
   aiOfferDiscountQty = null;
+  const offerText = analysisSourceText(pageTexts, rawPageTexts);
   discountBundleCounts = mergeDiscountBundleCounts(
-    extractDiscountBundleCounts(rawPageTexts.join("\n")),
-    extractDiscountBundleCountsFromRows(rows),
+    extractDiscountBundleCounts(offerText),
+    extractDiscountBundleCountsFromRows(analysisRows),
   );
   mappedDailyQuantities = extractMappedDailyQuantities(latestPdfText);
-  renderDashboard(pdf.numPages, allProducts, latestPdfText, name);
+  renderDashboard(pageTexts.length, allProducts, latestPdfText, name);
   hasReport = true;
   showReportShell();
   setOcrRetryVisible(false);
@@ -494,12 +594,17 @@ ${name}
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber);
       const content = await page.getTextContent();
-      rawPageTexts.push(content.items.map((item) => item.str).join("\n"));
+      const rawPageText = content.items.map((item) => item.str).join("\n");
       const lines = groupItemsByLine(content.items);
-      pageTexts.push(lines.map((line) => line.text).join(" "));
-      for (const line of lines) {
-        const row = rowFromLine(line);
-        if (row) rows.push(row);
+      const pageText = lines.map((line) => line.text).join(" ");
+      const pageRows = lines.map((line) => rowFromLine(line)).filter(Boolean);
+      if (pageLooksLikeReturnList(`${rawPageText}\n${pageText}`, pageRows)) continue;
+
+      const analysisPageIndex = pageTexts.length;
+      rawPageTexts.push(rawPageText);
+      pageTexts.push(pageText);
+      for (const row of pageRows) {
+        rows.push({ ...row, pageIndex: analysisPageIndex });
       }
     }
 
@@ -633,7 +738,7 @@ function isMmtBundleName(product) {
 }
 
 function isReviewedOffer(row) {
-  return isOrder100DiscountName(row.product) || isMmtBundleName(row.product);
+  return !rowLooksReturned(row) && row.amount < 0 && (isOrder100DiscountName(row.product) || isMmtBundleName(row.product));
 }
 
 function discountUnitMatches(row, target) {
@@ -647,19 +752,33 @@ function discountAmountMultipleMatches(row, target) {
   return remainder < 0.02 || Math.abs(target - remainder) < 0.02;
 }
 
+function getDiscountOfferUnits(row, targets) {
+  if (rowLooksReturned(row)) return 0;
+  if (row.amount >= 0) return 0;
+  const targetList = Array.isArray(targets) ? targets : [targets];
+  const target = targetList.find((value) => discountUnitMatches(row, value) || discountAmountMultipleMatches(row, value));
+  if (!target) return 0;
+  const amountUnits = Math.round(Math.abs(row.amount) / target);
+  return amountUnits > 0 ? amountUnits : row.qty;
+}
+
 function isMmtBundleDiscount(row) {
   return (
     isMmtBundleName(row.product) ||
     (isOrder100DiscountName(row.product) &&
-      (discountUnitMatches(row, 100) || discountUnitMatches(row, 100.01) || discountAmountMultipleMatches(row, 100)))
+      (discountUnitMatches(row, 100) ||
+        discountUnitMatches(row, 100.01) ||
+        discountAmountMultipleMatches(row, 100) ||
+        discountAmountMultipleMatches(row, 100.01)))
   );
 }
 
 function getMmtBundleUnits(row) {
-  if (isOrder100DiscountName(row.product) && discountAmountMultipleMatches(row, 100)) {
-    return Math.round(Math.abs(row.amount) / 100);
-  }
-  return row.qty;
+  return getDiscountOfferUnits(row, [100.01, 100]);
+}
+
+function getReviewedOfferUnits(row) {
+  return getDiscountOfferUnits(row, [21.74, 46.09, 67.83, 100.01, 100]) || row.qty;
 }
 
 function sumQtyByKeywords(products, keywords) {
@@ -764,6 +883,7 @@ function extractDiscountRowsNearOfferName(text, offerName) {
   let match;
   while ((match = pattern.exec(text)) !== null) {
     const segment = match[0];
+    if (textHasReturnedQuantity(segment)) continue;
     const qtyMatch = [...segment.matchAll(/\b(\d+(?:\.\d+)?)\b(?!\s*%)/g)]
       .map((candidate) => Number(candidate[1]))
       .find((value) => Math.abs(value - 100) > 0.01 && Math.abs(value - 100.01) > 0.01);
@@ -772,10 +892,26 @@ function extractDiscountRowsNearOfferName(text, offerName) {
     if (!qtyMatch || !amountMatch) continue;
     rows.push({
       qty: qtyMatch,
+      index: match.index,
       amount: Number(amountMatch.replace(/[−–—]/g, "-").replace(/\s|,/g, "")),
     });
   }
   return rows;
+}
+
+function dedupeSameTextDiscountRows(rows) {
+  return rows
+    .filter((row) => row.amount < 0)
+    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+    .filter((row, index, sortedRows) => {
+      const previousDuplicate = sortedRows.slice(0, index).some((previous) => {
+        const sameQty = Math.abs(previous.qty - row.qty) < 0.01;
+        const sameAmount = Math.abs(Math.abs(previous.amount) - Math.abs(row.amount)) < 0.01;
+        const sameTextArea = Math.abs((previous.index ?? 0) - (row.index ?? 0)) <= 220;
+        return sameQty && sameAmount && sameTextArea;
+      });
+      return !previousDuplicate;
+    });
 }
 
 function extractDiscountBundleCounts(text) {
@@ -787,22 +923,26 @@ function extractDiscountBundleCounts(text) {
   const amountFirst = new RegExp(`-\\s*([\\d,]+\\.\\d{2})[\\s\\S]{0,80}?(\\d+(?:\\.\\d+)?)\\s*تاﺪﺣﻮﻟا[\\s\\S]{0,80}?${offerName}`, "g");
   let match;
   while ((match = productFirst.exec(normalized)) !== null) {
-    rows.push({ qty: Number(match[1]), amount: Number(match[2].replace(/,/g, "")) });
+    if (textHasReturnedQuantity(match[0])) continue;
+    rows.push({ qty: Number(match[1]), amount: -Number(match[2].replace(/,/g, "")), index: match.index });
   }
   while ((match = amountFirst.exec(normalized)) !== null) {
-    rows.push({ qty: Number(match[2]), amount: Number(match[1].replace(/,/g, "")) });
+    if (textHasReturnedQuantity(match[0])) continue;
+    rows.push({ qty: Number(match[2]), amount: -Number(match[1].replace(/,/g, "")), index: match.index });
   }
-  const uniqueRows = [...new Map(rows.map((row) => [`${row.qty}:${Math.round(Math.abs(row.amount) * 100)}`, row])).values()];
+  const uniqueRows = dedupeSameTextDiscountRows(rows);
   return {
     pinkMusk: uniqueRows
-      .filter((row) => discountUnitMatches(row, 46.09))
-      .reduce((sum, row) => sum + row.qty, 0),
+      .filter((row) => getDiscountOfferUnits(row, 46.09))
+      .reduce((sum, row) => sum + getDiscountOfferUnits(row, 46.09), 0),
     discoveryWinter: uniqueRows
-      .filter((row) => discountUnitMatches(row, 67.83))
-      .reduce((sum, row) => sum + row.qty, 0),
-    magicD5: 0,
+      .filter((row) => getDiscountOfferUnits(row, 67.83))
+      .reduce((sum, row) => sum + getDiscountOfferUnits(row, 67.83), 0),
+    magicD5: uniqueRows
+      .filter((row) => getDiscountOfferUnits(row, 21.74))
+      .reduce((sum, row) => sum + getDiscountOfferUnits(row, 21.74), 0),
     mmt: uniqueRows
-      .filter((row) => discountUnitMatches(row, 100) || discountUnitMatches(row, 100.01))
+      .filter((row) => getDiscountOfferUnits(row, [100.01, 100]))
       .reduce((sum, row) => sum + getMmtBundleUnits(row), 0),
   };
 }
@@ -810,18 +950,22 @@ function extractDiscountBundleCounts(text) {
 function extractDiscountBundleCountsFromRows(rows) {
   return {
     pinkMusk: rows
+      .filter((row) => row.amount < 0)
       .filter((row) => isOrderDiscountName(row.product))
-      .filter((row) => discountUnitMatches(row, 46.09))
-      .reduce((sum, row) => sum + row.qty, 0),
+      .filter((row) => getDiscountOfferUnits(row, 46.09))
+      .reduce((sum, row) => sum + getDiscountOfferUnits(row, 46.09), 0),
     discoveryWinter: rows
+      .filter((row) => row.amount < 0)
       .filter((row) => isOrderDiscountName(row.product))
-      .filter((row) => discountUnitMatches(row, 67.83))
-      .reduce((sum, row) => sum + row.qty, 0),
+      .filter((row) => getDiscountOfferUnits(row, 67.83))
+      .reduce((sum, row) => sum + getDiscountOfferUnits(row, 67.83), 0),
     magicD5: rows
+      .filter((row) => row.amount < 0)
       .filter((row) => isOrder100DiscountName(row.product))
-      .filter((row) => discountUnitMatches(row, 21.74))
-      .reduce((sum, row) => sum + row.qty, 0),
+      .filter((row) => getDiscountOfferUnits(row, 21.74))
+      .reduce((sum, row) => sum + getDiscountOfferUnits(row, 21.74), 0),
     mmt: rows
+      .filter((row) => row.amount < 0)
       .filter((row) => isMmtBundleDiscount(row))
       .reduce((sum, row) => sum + getMmtBundleUnits(row), 0),
   };
@@ -935,11 +1079,14 @@ function renderOfferRows() {
     return;
   }
 
+  const reviewedOfferQuantityTotal = offerReviewRows.reduce((sum, row) => sum + getReviewedOfferUnits(row), 0);
+  const reviewedOfferAmountTotal = offerReviewRows.reduce((sum, row) => sum + row.amount, 0);
+
   for (const row of offerReviewRows) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${escapeHtml(getOfferLabel(row))}</td>
-      <td>${formatPlainNumber(row.qty)}</td>
+      <td>${formatPlainNumber(getReviewedOfferUnits(row))}</td>
       <td>${moneyFormatter.format(row.amount)} ر.س</td>
     `;
     els.offerRowsBody.appendChild(tr);
@@ -949,10 +1096,21 @@ function renderOfferRows() {
   total.className = "offer-total-row";
   total.innerHTML = `
     <td>الإجمالي</td>
-    <td>${formatPlainNumber(offerDiscountQuantityTotal)}</td>
-    <td>${moneyFormatter.format(offerReviewRows.reduce((sum, row) => sum + row.amount, 0))} ر.س</td>
+    <td>${formatPlainNumber(reviewedOfferQuantityTotal)}</td>
+    <td>${moneyFormatter.format(reviewedOfferAmountTotal)} ر.س</td>
   `;
   els.offerRowsBody.appendChild(total);
+
+  if (offerCategorySummary && Math.abs(offerCategorySummary.qty - reviewedOfferQuantityTotal) > 0.01) {
+    const pdfTotal = document.createElement("tr");
+    pdfTotal.className = "offer-total-row";
+    pdfTotal.innerHTML = `
+      <td>\u0625\u062c\u0645\u0627\u0644\u064a PDF</td>
+      <td>${formatPlainNumber(offerCategorySummary.qty)}</td>
+      <td>${moneyFormatter.format(offerCategorySummary.amount)} \u0631.\u0633</td>
+    `;
+    els.offerRowsBody.appendChild(pdfTotal);
+  }
 }
 
 function updateOrders(value) {
