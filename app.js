@@ -344,7 +344,7 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
   }
 
   latestPdfText = pageTexts.join("\n");
-  offerReviewRows = rows.filter((row) => isReviewedOffer(row));
+  offerReviewRows = rows.filter((row) => isCountableOfferDiscount(row));
   offerDiscountQuantityTotal = offerReviewRows.reduce((sum, row) => sum + row.qty, 0);
   pdfGrandQuantityTotal = extractPdfGrandQuantityTotal(rows);
   allExtractProducts = mergeContinuationRows(rows);
@@ -512,6 +512,10 @@ function isReviewedOffer(row) {
   return isOrder100DiscountName(row.product) || isMmtBundleName(row.product);
 }
 
+function isCountableOfferDiscount(row) {
+  return isReviewedOffer(row) && row.qty > 0 && row.amount < 0;
+}
+
 function discountUnitMatches(row, target) {
   return row.qty ? Math.abs(Math.abs(row.amount / row.qty) - target) < 0.02 : false;
 }
@@ -635,20 +639,21 @@ function extractDiscountBundleCounts(text) {
 }
 
 function extractDiscountBundleCountsFromRows(rows) {
+  const countableOfferRows = rows.filter((row) => isCountableOfferDiscount(row));
   return {
-    pinkMusk: rows
+    pinkMusk: countableOfferRows
       .filter((row) => isOrderDiscountName(row.product))
       .filter((row) => discountUnitMatches(row, 46.09))
       .reduce((sum, row) => sum + row.qty, 0),
-    discoveryWinter: rows
+    discoveryWinter: countableOfferRows
       .filter((row) => isOrderDiscountName(row.product))
       .filter((row) => discountUnitMatches(row, 67.83))
       .reduce((sum, row) => sum + row.qty, 0),
-    magicD5: rows
+    magicD5: countableOfferRows
       .filter((row) => isOrder100DiscountName(row.product))
       .filter((row) => discountUnitMatches(row, 21.74))
       .reduce((sum, row) => sum + row.qty, 0),
-    mmt: rows
+    mmt: countableOfferRows
       .filter((row) => isMmtBundleName(row.product))
       .filter((row) => discountUnitMatches(row, 100.01))
       .reduce((sum, row) => sum + row.qty, 0),
