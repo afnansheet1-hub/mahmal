@@ -239,17 +239,23 @@ function pageLooksLikeReturnList(text, rows = []) {
   return textLooksLikeReturnList(text) || rowsLookLikeReturnList(rows);
 }
 
+function returnPageIndexes(rows, pageTexts = [], rawPageTexts = []) {
+  const indexes = new Set();
+  const pageCount = Math.max(pageTexts.length, rawPageTexts.length);
+  for (let index = 0; index < pageCount; index += 1) {
+    const pageRows = rows.filter((row) => row.pageIndex === index);
+    const text = `${rawPageTexts[index] || ""}\n${pageTexts[index] || ""}`;
+    if (pageLooksLikeReturnList(text, pageRows)) indexes.add(index);
+  }
+  return indexes;
+}
+
 function rowLooksReturned(row) {
   return row.isReturnList || textHasReturnedQuantity(`${row.rawText || ""} ${row.product || ""}`);
 }
 
 function markReturnListRows(rows, pageTexts = [], rawPageTexts = []) {
-  const returnPages = new Set();
-  const pageCount = Math.max(pageTexts.length, rawPageTexts.length);
-  for (let index = 0; index < pageCount; index += 1) {
-    const text = `${rawPageTexts[index] || ""}\n${pageTexts[index] || ""}`;
-    if (pageLooksLikeReturnList(text)) returnPages.add(index);
-  }
+  const returnPages = returnPageIndexes(rows, pageTexts, rawPageTexts);
 
   return rows.map((row) => ({
     ...row,
@@ -260,12 +266,12 @@ function markReturnListRows(rows, pageTexts = [], rawPageTexts = []) {
   }));
 }
 
-function analysisSourceText(pageTexts = [], rawPageTexts = []) {
+function analysisSourceText(pageTexts = [], rawPageTexts = [], returnPages = new Set()) {
   const pageCount = Math.max(pageTexts.length, rawPageTexts.length);
   const pages = [];
   for (let index = 0; index < pageCount; index += 1) {
     const text = `${rawPageTexts[index] || ""}\n${pageTexts[index] || ""}`;
-    if (!pageLooksLikeReturnList(text)) pages.push(text);
+    if (!returnPages.has(index) && !pageLooksLikeReturnList(text)) pages.push(text);
   }
   return pages.join("\n");
 }
@@ -515,8 +521,6 @@ async function extractRowsWithOcr(pdf) {
       const canvas = await renderPageToCanvas(page, ocrScale);
       const result = await worker.recognize(canvas);
       const pageRows = rowsFromOcrText(result.data.text);
-      if (pageLooksLikeReturnList(result.data.text, pageRows)) continue;
-
       const analysisPageIndex = pageTexts.length;
       pageTexts.push(result.data.text);
       rows.push(...pageRows.map((row) => ({ ...row, pageIndex: analysisPageIndex })));
@@ -534,8 +538,9 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
   }
 
   rows = markReturnListRows(rows, pageTexts, rawPageTexts);
+  const returnPages = returnPageIndexes(rows, pageTexts, rawPageTexts);
   const analysisRows = rows.filter((row) => !rowLooksReturned(row));
-  latestPdfText = analysisSourceText(pageTexts, rawPageTexts);
+  latestPdfText = analysisSourceText(pageTexts, rawPageTexts, returnPages);
   offerReviewRows = analysisRows.filter((row) => isReviewedOffer(row));
   offerCategorySummary = extractOfferCategorySummary(analysisRows);
   const reviewedOfferQuantityTotal = offerReviewRows.reduce((sum, row) => sum + getReviewedOfferUnits(row), 0);
@@ -545,7 +550,7 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
   allProducts = allExtractProducts.filter((row) => row.amount > 0);
   aiPdfTotalQty = null;
   aiOfferDiscountQty = null;
-  const offerText = analysisSourceText(pageTexts, rawPageTexts);
+  const offerText = analysisSourceText(pageTexts, rawPageTexts, returnPages);
   discountBundleCounts = mergeDiscountBundleCounts(
     extractDiscountBundleCounts(offerText),
     extractDiscountBundleCountsFromRows(analysisRows),
@@ -598,8 +603,6 @@ ${name}
       const lines = groupItemsByLine(content.items);
       const pageText = lines.map((line) => line.text).join(" ");
       const pageRows = lines.map((line) => rowFromLine(line)).filter(Boolean);
-      if (pageLooksLikeReturnList(`${rawPageText}\n${pageText}`, pageRows)) continue;
-
       const analysisPageIndex = pageTexts.length;
       rawPageTexts.push(rawPageText);
       pageTexts.push(pageText);
