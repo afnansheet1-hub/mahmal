@@ -516,6 +516,28 @@ function isCountableOfferDiscount(row) {
   return isReviewedOffer(row) && row.qty > 0 && row.amount < 0;
 }
 
+const order100DiscountUnitPrices = [21.74, 46.09, 67.83, 100, 100.01];
+
+function countOrder100DiscountUnits(row) {
+  const amount = Math.abs(row.amount);
+  for (const unitPrice of order100DiscountUnitPrices) {
+    const units = Math.round(amount / unitPrice);
+    if (units < 1) continue;
+    const expectedAmount = unitPrice * units;
+    if (Math.abs(amount - expectedAmount) <= 0.03) {
+      return units;
+    }
+  }
+  return row.qty;
+}
+
+function sumOrder100DiscountUnits(rows) {
+  return rows
+    .filter((row) => isCountableOfferDiscount(row))
+    .filter((row) => isOrder100DiscountName(row.product))
+    .reduce((sum, row) => sum + countOrder100DiscountUnits(row), 0);
+}
+
 function discountUnitMatches(row, target) {
   return row.qty ? Math.abs(Math.abs(row.amount / row.qty) - target) < 0.02 : false;
 }
@@ -684,6 +706,7 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const pdfQuantityTotal = pdfGrandQuantityTotal ?? aiPdfTotalQty ?? totalQty;
   const uptBaseQty = Math.max(0, pdfQuantityTotal - offerDiscountQuantityTotal);
   const upt = adt ? uptBaseQty / adt : 0;
+  const order100DiscountUnits = sumOrder100DiscountUnits(offerReviewRows);
   const pink = sumQtyByKeywords(countProducts, ["pink", "pinko"]);
   const muskCollection = sumQtyByMappedProduct(countProducts, "muskCollection");
   const pinkMuskBundle = discountBundleCounts.pinkMusk ?? 0;
@@ -706,6 +729,7 @@ ${formatDateForExtract(date)}
 - ADT : ${formatPlainNumber(adt)}
 - AT : ${formatPlainNumber(at)}
 - UPT : ${formatPlainNumber(upt)}
+- on your order 100% : ${formatPlainNumber(order100DiscountUnits)}
 - Cash : N/A
 ------------------
 - Pinkoctober :${formatPlainNumber(pink)}
