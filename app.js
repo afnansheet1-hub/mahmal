@@ -1,11 +1,6 @@
-const pdfjsLib = window.pdfjsLib;
+import * as pdfjsLib from "./vendor/pdf.min.mjs";
 
-if (!pdfjsLib) {
-  throw new Error("PDF reader failed to load");
-}
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = "./vendor/pdf.legacy.worker.min.js";
-const allowExternalOcrResources = false;
+pdfjsLib.GlobalWorkerOptions.workerSrc = "./vendor/pdf.worker.min.mjs";
 
 const defaultPdfName = "تفاصيل المبيعات (3).pdf";
 const els = {
@@ -66,7 +61,6 @@ let discountBundleCounts = {
 };
 let offerReviewRows = [];
 let offerDiscountQuantityTotal = 0;
-let offerCategorySummary = null;
 let pdfGrandQuantityTotal = null;
 let lastPdfSalesTotal = 0;
 let lastPdfQtyTotal = 0;
@@ -83,74 +77,10 @@ function setOcrRetryVisible(visible) {
   els.ocrRetryButton.hidden = !visible;
 }
 
-function activateView(viewId) {
-  document.querySelectorAll(".tab-button").forEach((button) => {
-    button.classList.toggle("active", button.dataset.view === viewId);
-  });
-  document.querySelectorAll(".app-view").forEach((view) => {
-    view.classList.toggle("active", view.id === viewId);
-  });
-}
-
-function replaceNodeChildren(element, ...children) {
-  while (element.firstChild) {
-    element.removeChild(element.firstChild);
-  }
-  children.forEach((child) => element.appendChild(child));
-}
-
-function readFileBuffer(file) {
-  if (file.arrayBuffer) {
-    return file.arrayBuffer();
-  }
-
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(reader.error || new Error("File could not be read"));
-    reader.readAsArrayBuffer(file);
-  });
-}
-
-function copyArrayBuffer(buffer) {
-  const bytes = new Uint8Array(buffer);
-  const copy = new Uint8Array(bytes.length);
-  copy.set(bytes);
-  return copy.buffer;
-}
-
-function showReportShell() {
-  document.body.classList.add("has-report");
-  activateView("dashboardView");
-}
-
-function showExtractProgress(message) {
-  els.dailyExtract.textContent = message;
-  els.calculationReview.textContent = "جاري تجهيز تفاصيل الحساب بعد قراءة PDF.";
-}
-
-function userFacingError(error) {
-  const raw = String(error?.message || error || "");
-  if (/PDF reader failed|pdfjs|workerSrc/i.test(raw)) {
-    return "تعذر تشغيل قارئ PDF في المتصفح. حدث الصفحة ثم أعد رفع الملف.";
-  }
-  if (/createWorker|tesseract|worker/i.test(raw)) {
-    return "تعذر تشغيل OCR على هذا المتصفح. جرّب إعادة تصدير PDF كنصي أو افتحه من جهاز آخر.";
-  }
-  if (/No analyzable rows|text content|InvalidPDF|PDF/i.test(raw)) {
-    return "تعذر قراءة جدول المبيعات من هذا الملف. تأكد أن الملف PDF واضح وليس صورة منخفضة الجودة.";
-  }
-  if (/network|fetch|Failed to fetch|Load failed/i.test(raw)) {
-    return "تعذر تحميل ملفات القراءة المساعدة. تأكد من اتصال الإنترنت ثم أعد المحاولة.";
-  }
-  return "تعذر تحليل الملف. أعد تصدير PDF من النظام ثم ارفعه من جديد.";
-}
-
 function resetEmptyState() {
   hasReport = false;
   offerReviewRows = [];
   offerDiscountQuantityTotal = 0;
-  offerCategorySummary = null;
   pdfGrandQuantityTotal = null;
   document.body.classList.remove("has-report");
   els.fileName.textContent = "لم يتم تحميل ملف";
@@ -165,7 +95,7 @@ function resetEmptyState() {
   els.focusCards.innerHTML = "";
   els.priceBands.innerHTML = "";
   els.barChart.innerHTML = "";
-  replaceNodeChildren(els.preview);
+  els.preview.replaceChildren();
   els.productsBody.innerHTML = "<tr><td colspan='6'>ارفع ملف PDF لعرض المنتجات.</td></tr>";
   els.dailyExtract.textContent = "سيظهر المستخرج هنا بعد تحميل ملف PDF.";
   els.calculationReview.textContent = "ستظهر تفاصيل حساب UPT بعد تحميل PDF.";
@@ -176,10 +106,10 @@ function resetEmptyState() {
 
 function escapeHtml(value) {
   return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 function cleanText(value) {
@@ -200,86 +130,9 @@ function normalizeDigits(value) {
     .replace(/٬/g, ",");
 }
 
-function textIndicatesReturnList(value) {
-  const text = normalizeDigits(value).toLowerCase();
-  return (
-    /refund|returned?|return\s+items?|refund\s+items?/i.test(text) ||
-    /مرتجع|مرتجعات|مسترجع|مسترجعات|استرجاع|استرداد/.test(text) ||
-    /\u0645\u0631\u062a\u062c\u0639|\u0645\u0631\u062a\u062c\u0639\u0627\u062a|\u0645\u0633\u062a\u0631\u062c\u0639|\u0645\u0633\u062a\u0631\u062c\u0639\u0627\u062a|\u0627\u0633\u062a\u0631\u062c\u0627\u0639|\u0627\u0633\u062a\u0631\u062f\u0627\u062f/.test(text)
-  );
-}
-
-function textIndicatesReturnHeading(value) {
-  const text = normalizeDigits(value);
-  return /\u0627\u0644\u0627\u0633\u062a\u0631\u062f\u0627\u062f\u0627\u062a|\u0636\u0631\u0627\u0626\u0628\s+\u0627\u0633\u062a\u0631\u062f\u0627\u062f\s+\u0627\u0644\u0623\u0645\u0648\u0627\u0644|\u0627\u0644\u062f\u0641\u0639\u0627\u062a/.test(text);
-}
-
-function textHasReturnedQuantity(value) {
-  const text = normalizeDigits(value);
-  return /(?:^|\s)(?:-\s*\d+(?:\.\d)?|\d+(?:\.\d)?\s*-)(?=\s|$)/.test(text);
-}
-
-function countReturnedQuantityMarkers(value) {
-  const text = normalizeDigits(value);
-  return (text.match(/(?:^|\s)(?:-\s*\d+(?:\.\d)?|\d+(?:\.\d)?\s*-)(?=\s|$)/g) || []).length;
-}
-
-function textLooksLikeReturnList(value) {
-  const text = normalizeDigits(value);
-  return textIndicatesReturnList(text) || textIndicatesReturnHeading(text) || countReturnedQuantityMarkers(text) >= 3;
-}
-
-function rowsLookLikeReturnList(rows) {
-  const returnedProductRows = rows.filter((row) => row.barcode && row.amount < 0).length;
-  const returnedOfferRows = rows.filter((row) => isOrderDiscountName(row.product) && (row.amount > 0 || textHasReturnedQuantity(row.rawText))).length;
-  return returnedProductRows >= 2 || (returnedProductRows >= 1 && returnedOfferRows >= 1);
-}
-
-function pageLooksLikeReturnList(text, rows = []) {
-  return textLooksLikeReturnList(text) || rowsLookLikeReturnList(rows);
-}
-
-function returnPageIndexes(rows, pageTexts = [], rawPageTexts = []) {
-  const indexes = new Set();
-  const pageCount = Math.max(pageTexts.length, rawPageTexts.length);
-  for (let index = 0; index < pageCount; index += 1) {
-    const pageRows = rows.filter((row) => row.pageIndex === index);
-    const text = `${rawPageTexts[index] || ""}\n${pageTexts[index] || ""}`;
-    if (pageLooksLikeReturnList(text, pageRows)) indexes.add(index);
-  }
-  return indexes;
-}
-
-function rowLooksReturned(row) {
-  return row.isReturnList || textHasReturnedQuantity(`${row.rawText || ""} ${row.product || ""}`);
-}
-
-function markReturnListRows(rows, pageTexts = [], rawPageTexts = []) {
-  const returnPages = returnPageIndexes(rows, pageTexts, rawPageTexts);
-
-  return rows.map((row) => ({
-    ...row,
-    isReturnList:
-      returnPages.has(row.pageIndex) ||
-      textLooksLikeReturnList(`${row.rawText || ""} ${row.product || ""}`) ||
-      textHasReturnedQuantity(`${row.rawText || ""} ${row.product || ""}`),
-  }));
-}
-
-function analysisSourceText(pageTexts = [], rawPageTexts = [], returnPages = new Set()) {
-  const pageCount = Math.max(pageTexts.length, rawPageTexts.length);
-  const pages = [];
-  for (let index = 0; index < pageCount; index += 1) {
-    const text = `${rawPageTexts[index] || ""}\n${pageTexts[index] || ""}`;
-    if (!returnPages.has(index) && !pageLooksLikeReturnList(text)) pages.push(text);
-  }
-  return pages.join("\n");
-}
-
 function parseAmount(value) {
-  const matches = normalizeDigits(value).replace(/[﷼]/g, "").match(/-?\s*[\d,]+\.\d{2}/g) || [];
-  const match = matches.find((item) => item.trim().startsWith("-")) || matches[0];
-  return match ? Number(match.replace(/\s|,/g, "")) : null;
+  const match = normalizeDigits(value).replace(/[﷼]/g, "").match(/-?\s*[\d,]+\.\d{2}/);
+  return match ? Number(match[0].replace(/\s|,/g, "")) : null;
 }
 
 function parseQty(value) {
@@ -332,12 +185,7 @@ function rowFromLine(line) {
   const qtyItems = line.items
     .map((item) => ({ value: parseQty(item.text), x: item.x, text: item.text }))
     .filter((item) => item.value !== null && item.value < 10000 && (!amount || Math.abs(item.value - amount) > 0.01));
-  const filteredQtyItems = /100\s*%/.test(text)
-    ? qtyItems.filter((item) => Math.abs(item.value - 100) > 0.01)
-    : qtyItems;
-  const qtySourceItems = filteredQtyItems.length ? filteredQtyItems : qtyItems;
-  const lastQtyItem = qtySourceItems.length ? qtySourceItems[qtySourceItems.length - 1] : null;
-  const qty = (barcode ? lastQtyItem?.value : qtySourceItems[0]?.value) ?? null;
+  const qty = (barcode ? qtyItems.at(-1)?.value : qtyItems[0]?.value) ?? null;
 
   if (amount === null || qty === null) {
     return null;
@@ -361,15 +209,9 @@ function rowFromText(text) {
   const normalizedText = normalizeDigits(text).replace(/\s+/g, " ").trim();
   const amount = parseAmount(normalizedText);
   const barcode = extractBarcode(normalizedText);
-  const qtyCandidates = [];
-  const qtyPattern = /(?:^|\s)(\d+(?:\.\d)?)(?:\s|$)/g;
-  let qtyMatch;
-  while ((qtyMatch = qtyPattern.exec(normalizedText)) !== null) {
-    const value = Number(qtyMatch[1]);
-    if (value !== null && value < 10000 && (!amount || Math.abs(value - amount) > 0.01)) {
-      qtyCandidates.push(value);
-    }
-  }
+  const qtyCandidates = [...normalizedText.matchAll(/(?:^|\s)(\d+(?:\.\d)?)(?:\s|$)/g)]
+    .map((match) => Number(match[1]))
+    .filter((value) => value !== null && value < 10000 && (!amount || Math.abs(value - amount) > 0.01));
   const filteredQty = /100\s*%/.test(normalizedText) ? qtyCandidates.filter((value) => Math.abs(value - 100) > 0.01) : qtyCandidates;
   const qty = filteredQty[0] ?? qtyCandidates[0] ?? null;
 
@@ -392,7 +234,7 @@ function rowFromText(text) {
   return { product, barcode, qty, amount, unitPrice: amount / qty, rawText: normalizedText };
 }
 
-function rowsFromOcrText(text, pageIndex = null) {
+function rowsFromOcrText(text) {
   const lines = normalizeDigits(text)
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -408,7 +250,6 @@ function rowsFromOcrText(text, pageIndex = null) {
     ];
     const row = candidates.map((candidate) => rowFromText(candidate)).find(Boolean);
     if (row && !seen.has(row.rawText)) {
-      row.pageIndex = pageIndex;
       seen.add(row.rawText);
       rows.push(row);
     }
@@ -434,32 +275,15 @@ function isGrandTotalRow(row) {
 }
 
 function extractPdfGrandQuantityTotal(rows) {
-  const totalRows = rows.filter((row) => isGrandTotalRow(row) && row.amount > 0 && row.qty > 0);
-  const totalRow = totalRows.length ? totalRows[totalRows.length - 1] : null;
+  const totalRow = rows
+    .filter((row) => isGrandTotalRow(row) && row.amount > 0 && row.qty > 0)
+    .at(-1);
   if (totalRow) return totalRow.qty;
 
   const fallbackRows = rows
     .filter((row) => !row.barcode && row.amount > 0 && row.qty > 0 && !isOfferDiscount(row))
     .sort((a, b) => b.qty - a.qty);
   return fallbackRows[0]?.qty ?? null;
-}
-
-function isUnclassifiedDiscountSummary(row) {
-  const text = `${row.rawText || ""} ${row.product || ""}`;
-  return (
-    !row.barcode &&
-    Number.isFinite(row.amount) &&
-    row.amount < 0 &&
-    !rowLooksReturned(row) &&
-    row.qty > 0 &&
-    /\u063a\s*\u064a\s*\u0631/.test(text)
-  );
-}
-
-function extractOfferCategorySummary(rows) {
-  const candidates = rows.filter(isUnclassifiedDiscountSummary);
-  if (!candidates.length) return null;
-  return candidates.reduce((best, row) => (row.qty > best.qty ? row : best), candidates[0]);
 }
 
 async function renderPageToCanvas(page, scale = 2) {
@@ -481,28 +305,12 @@ function getOcrScale(pdf) {
   return 2;
 }
 
-async function createOcrWorker(options) {
-  if (!allowExternalOcrResources) {
-    throw new Error("OCR external resources are disabled for privacy");
-  }
-
-  const tesseractModule = await import("./vendor/tesseract.esm.min.js");
-  const tesseract = tesseractModule.default || tesseractModule;
-  const createWorker =
-    tesseractModule.createWorker ||
-    tesseract.createWorker ||
-    window.Tesseract?.createWorker;
-
-  if (typeof createWorker !== "function") {
-    throw new Error("OCR worker is not available");
-  }
-
-  return createWorker("eng+ara", 1, options);
-}
-
 async function extractRowsWithOcr(pdf) {
-  const worker = await createOcrWorker({
+  const { createWorker } = await import("./vendor/tesseract.esm.min.js");
+  const worker = await createWorker("eng+ara", 1, {
     workerPath: new URL("./vendor/tesseract-worker.min.js", import.meta.url).href,
+    langPath: "https://tessdata.projectnaptha.com/4.0.0",
+    corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@v7.0.0",
     gzip: true,
     logger: (message) => {
       if (message.status === "recognizing text") {
@@ -520,10 +328,8 @@ async function extractRowsWithOcr(pdf) {
       const page = await pdf.getPage(pageNumber);
       const canvas = await renderPageToCanvas(page, ocrScale);
       const result = await worker.recognize(canvas);
-      const pageRows = rowsFromOcrText(result.data.text);
-      const analysisPageIndex = pageTexts.length;
       pageTexts.push(result.data.text);
-      rows.push(...pageRows.map((row) => ({ ...row, pageIndex: analysisPageIndex })));
+      rows.push(...rowsFromOcrText(result.data.text));
     }
   } finally {
     await worker.terminate();
@@ -537,28 +343,22 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
     throw new Error("No analyzable rows found");
   }
 
-  rows = markReturnListRows(rows, pageTexts, rawPageTexts);
-  const returnPages = returnPageIndexes(rows, pageTexts, rawPageTexts);
-  const analysisRows = rows.filter((row) => !rowLooksReturned(row));
-  latestPdfText = analysisSourceText(pageTexts, rawPageTexts, returnPages);
-  offerReviewRows = analysisRows.filter((row) => isReviewedOffer(row));
-  offerCategorySummary = extractOfferCategorySummary(analysisRows);
-  const reviewedOfferQuantityTotal = offerReviewRows.reduce((sum, row) => sum + getReviewedOfferUnits(row), 0);
-  offerDiscountQuantityTotal = offerCategorySummary?.qty ?? reviewedOfferQuantityTotal;
-  pdfGrandQuantityTotal = extractPdfGrandQuantityTotal(analysisRows);
-  allExtractProducts = mergeContinuationRows(analysisRows);
+  latestPdfText = pageTexts.join("\n");
+  offerReviewRows = rows.filter((row) => isReviewedOffer(row));
+  offerDiscountQuantityTotal = offerReviewRows.reduce((sum, row) => sum + row.qty, 0);
+  pdfGrandQuantityTotal = extractPdfGrandQuantityTotal(rows);
+  allExtractProducts = mergeContinuationRows(rows);
   allProducts = allExtractProducts.filter((row) => row.amount > 0);
   aiPdfTotalQty = null;
   aiOfferDiscountQty = null;
-  const offerText = analysisSourceText(pageTexts, rawPageTexts, returnPages);
   discountBundleCounts = mergeDiscountBundleCounts(
-    extractDiscountBundleCounts(offerText),
-    extractDiscountBundleCountsFromRows(analysisRows),
+    extractDiscountBundleCounts(rawPageTexts.join("\n")),
+    extractDiscountBundleCountsFromRows(rows),
   );
   mappedDailyQuantities = extractMappedDailyQuantities(latestPdfText);
-  renderDashboard(pageTexts.length, allProducts, latestPdfText, name);
+  renderDashboard(pdf.numPages, allProducts, latestPdfText, name);
   hasReport = true;
-  showReportShell();
+  document.body.classList.add("has-report");
   setOcrRetryVisible(false);
   setStatus(
     usedOcr
@@ -572,23 +372,12 @@ async function analyzePdf(source, name, options = {}) {
   const forceOcr = options.forceOcr || false;
   hasReport = false;
   setOcrRetryVisible(false);
-  showReportShell();
-  showExtractProgress(`جاري تحليل ملف PDF...
-
-${name}
-
-سيظهر المستخرج اليومي هنا فور انتهاء القراءة.`);
+  if (!forceOcr) document.body.classList.remove("has-report");
   setStatus("جاري قراءة الصفحات واستخراج جدول المبيعات والمؤشرات التفصيلية...", "loading");
   els.fileName.textContent = name;
   els.previewLabel.textContent = "الصفحة الأولى";
 
-  const pdfOptions = {
-    data: source.data,
-    disableWorker: true,
-    disableFontFace: true,
-    nativeImageDecoderSupport: "none",
-  };
-  const loadingTask = pdfjsLib.getDocument(pdfOptions);
+  const loadingTask = pdfjsLib.getDocument(source);
   const pdf = await loadingTask.promise;
   await renderPreview(pdf);
   if (!forceOcr) {
@@ -599,15 +388,12 @@ ${name}
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber);
       const content = await page.getTextContent();
-      const rawPageText = content.items.map((item) => item.str).join("\n");
+      rawPageTexts.push(content.items.map((item) => item.str).join("\n"));
       const lines = groupItemsByLine(content.items);
-      const pageText = lines.map((line) => line.text).join(" ");
-      const pageRows = lines.map((line) => rowFromLine(line)).filter(Boolean);
-      const analysisPageIndex = pageTexts.length;
-      rawPageTexts.push(rawPageText);
-      pageTexts.push(pageText);
-      for (const row of pageRows) {
-        rows.push({ ...row, pageIndex: analysisPageIndex });
+      pageTexts.push(lines.map((line) => line.text).join(" "));
+      for (const line of lines) {
+        const row = rowFromLine(line);
+        if (row) rows.push(row);
       }
     }
 
@@ -622,24 +408,6 @@ ${name}
   applyAnalysisRows({ ...ocrResult, pdf, name, usedOcr: true });
 }
 
-async function analyzePdfWithAutomaticOcr(buffer, name) {
-  try {
-    await analyzePdf({ data: copyArrayBuffer(buffer) }, name);
-  } catch (error) {
-    if (/createWorker|tesseract|OCR worker|worker/i.test(String(error?.message || error))) {
-      throw error;
-    }
-
-    setStatus("لم تنجح القراءة العادية. جاري تشغيل OCR تلقائيًا بدون ضغط زر...", "loading");
-    showExtractProgress(`لم تنجح القراءة العادية.
-
-${name}
-
-جاري تشغيل OCR تلقائيًا وقراءة كل صفحات PDF...`);
-    await analyzePdf({ data: copyArrayBuffer(buffer) }, name, { forceOcr: true });
-  }
-}
-
 async function renderPreview(pdf) {
   const page = await pdf.getPage(1);
   const viewport = page.getViewport({ scale: 1.6 });
@@ -648,7 +416,7 @@ async function renderPreview(pdf) {
   canvas.width = Math.floor(viewport.width);
   canvas.height = Math.floor(viewport.height);
   await page.render({ canvasContext: context, viewport }).promise;
-  replaceNodeChildren(els.preview, canvas);
+  els.preview.replaceChildren(canvas);
 }
 
 function renderDashboard(pageCount, products, allText, name) {
@@ -741,47 +509,11 @@ function isMmtBundleName(product) {
 }
 
 function isReviewedOffer(row) {
-  return !rowLooksReturned(row) && row.amount < 0 && (isOrder100DiscountName(row.product) || isMmtBundleName(row.product));
+  return isOrder100DiscountName(row.product) || isMmtBundleName(row.product);
 }
 
 function discountUnitMatches(row, target) {
   return row.qty ? Math.abs(Math.abs(row.amount / row.qty) - target) < 0.02 : false;
-}
-
-function discountAmountMultipleMatches(row, target) {
-  const amount = Math.abs(row.amount || 0);
-  if (!amount || !target) return false;
-  const remainder = amount % target;
-  return remainder < 0.02 || Math.abs(target - remainder) < 0.02;
-}
-
-function getDiscountOfferUnits(row, targets) {
-  if (rowLooksReturned(row)) return 0;
-  if (row.amount >= 0) return 0;
-  const targetList = Array.isArray(targets) ? targets : [targets];
-  const target = targetList.find((value) => discountUnitMatches(row, value) || discountAmountMultipleMatches(row, value));
-  if (!target) return 0;
-  const amountUnits = Math.round(Math.abs(row.amount) / target);
-  return amountUnits > 0 ? amountUnits : row.qty;
-}
-
-function isMmtBundleDiscount(row) {
-  return (
-    isMmtBundleName(row.product) ||
-    (isOrder100DiscountName(row.product) &&
-      (discountUnitMatches(row, 100) ||
-        discountUnitMatches(row, 100.01) ||
-        discountAmountMultipleMatches(row, 100) ||
-        discountAmountMultipleMatches(row, 100.01)))
-  );
-}
-
-function getMmtBundleUnits(row) {
-  return getDiscountOfferUnits(row, [100.01, 100]);
-}
-
-function getReviewedOfferUnits(row) {
-  return getDiscountOfferUnits(row, [21.74, 46.09, 67.83, 100.01, 100]) || row.qty;
 }
 
 function sumQtyByKeywords(products, keywords) {
@@ -794,10 +526,6 @@ function sumQtyByKeywords(products, keywords) {
 }
 
 const dailyProductMap = {
-  d1Box: {
-    barcodes: ["6287020283673"],
-    names: [],
-  },
   discoveryBlack: {
     barcodes: ["6287020284793"],
     names: ["match collection match discovery set d4"],
@@ -815,7 +543,7 @@ const dailyProductMap = {
     names: ["match collection match discovery set ramadan d5"],
   },
   tawziyatBoxSolo: {
-    barcodes: ["6287020286926", "6287020286933"],
+    barcodes: ["6287020286926"],
     names: ["tawziyat box solo"],
   },
 };
@@ -880,97 +608,50 @@ function extractMappedDailyQuantities(text) {
   return quantities;
 }
 
-function extractDiscountRowsNearOfferName(text, offerName) {
-  const rows = [];
-  const pattern = new RegExp(`${offerName}[\\s\\S]{0,180}`, "gi");
-  let match;
-  while ((match = pattern.exec(text)) !== null) {
-    const segment = match[0];
-    if (textHasReturnedQuantity(segment)) continue;
-    const qtyMatch = [...segment.matchAll(/\b(\d+(?:\.\d+)?)\b(?!\s*%)/g)]
-      .map((candidate) => Number(candidate[1]))
-      .find((value) => Math.abs(value - 100) > 0.01 && Math.abs(value - 100.01) > 0.01);
-    const amountMatches = segment.match(/[-−–—]?\s*[\d,]+\.\d{2}/g) || [];
-    const amountMatch = amountMatches.find((value) => value.trim().startsWith("-")) || amountMatches[0];
-    if (!qtyMatch || !amountMatch) continue;
-    rows.push({
-      qty: qtyMatch,
-      index: match.index,
-      amount: Number(amountMatch.replace(/[−–—]/g, "-").replace(/\s|,/g, "")),
-    });
-  }
-  return rows;
-}
-
-function dedupeSameTextDiscountRows(rows) {
-  return rows
-    .filter((row) => row.amount < 0)
-    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
-    .filter((row, index, sortedRows) => {
-      const previousDuplicate = sortedRows.slice(0, index).some((previous) => {
-        const sameQty = Math.abs(previous.qty - row.qty) < 0.01;
-        const sameAmount = Math.abs(Math.abs(previous.amount) - Math.abs(row.amount)) < 0.01;
-        const sameTextArea = Math.abs((previous.index ?? 0) - (row.index ?? 0)) <= 220;
-        return sameQty && sameAmount && sameTextArea;
-      });
-      return !previousDuplicate;
-    });
-}
-
 function extractDiscountBundleCounts(text) {
   const rows = [];
-  const normalized = normalizeDigits(text).replace(/\u200b/g, " ");
-  const offerName = "(?:on\\s+your\\s+order\\s+100\\s*%|(?:100\\.01\\s*)?per\\s+point\\s+on\\s+your\\s+order|(?:100\\.01\\s*)?per\\s+order\\s+on\\s+your\\s+order)";
-  rows.push(...extractDiscountRowsNearOfferName(normalized, offerName));
-  const productFirst = new RegExp(`${offerName}[\\s\\S]{0,80}?(\\d+(?:\\.\\d+)?)\\s*تاﺪﺣﻮﻟا[\\s\\S]{0,80}?-\\s*([\\d,]+\\.\\d{2})`, "g");
-  const amountFirst = new RegExp(`-\\s*([\\d,]+\\.\\d{2})[\\s\\S]{0,80}?(\\d+(?:\\.\\d+)?)\\s*تاﺪﺣﻮﻟا[\\s\\S]{0,80}?${offerName}`, "g");
+  const normalized = text.replace(/\u200b/g, " ");
+  const productFirst = /on\s+your\s+order\s+100%[\s\S]{0,80}?(\d+(?:\.\d+)?)\s*تاﺪﺣﻮﻟا[\s\S]{0,80}?-\s*([\d,]+\.\d{2})/g;
+  const amountFirst = /-\s*([\d,]+\.\d{2})[\s\S]{0,80}?(\d+(?:\.\d+)?)\s*تاﺪﺣﻮﻟا[\s\S]{0,80}?on\s+your\s+order\s+100%/g;
   let match;
   while ((match = productFirst.exec(normalized)) !== null) {
-    if (textHasReturnedQuantity(match[0])) continue;
-    rows.push({ qty: Number(match[1]), amount: -Number(match[2].replace(/,/g, "")), index: match.index });
+    rows.push({ qty: Number(match[1]), amount: Number(match[2].replace(/,/g, "")) });
   }
   while ((match = amountFirst.exec(normalized)) !== null) {
-    if (textHasReturnedQuantity(match[0])) continue;
-    rows.push({ qty: Number(match[2]), amount: -Number(match[1].replace(/,/g, "")), index: match.index });
+    rows.push({ qty: Number(match[2]), amount: Number(match[1].replace(/,/g, "")) });
   }
-  const uniqueRows = dedupeSameTextDiscountRows(rows);
   return {
-    pinkMusk: uniqueRows
-      .filter((row) => getDiscountOfferUnits(row, 46.09))
-      .reduce((sum, row) => sum + getDiscountOfferUnits(row, 46.09), 0),
-    discoveryWinter: uniqueRows
-      .filter((row) => getDiscountOfferUnits(row, 67.83))
-      .reduce((sum, row) => sum + getDiscountOfferUnits(row, 67.83), 0),
-    magicD5: uniqueRows
-      .filter((row) => getDiscountOfferUnits(row, 21.74))
-      .reduce((sum, row) => sum + getDiscountOfferUnits(row, 21.74), 0),
-    mmt: uniqueRows
-      .filter((row) => getDiscountOfferUnits(row, [100.01, 100]))
-      .reduce((sum, row) => sum + getMmtBundleUnits(row), 0),
+    pinkMusk: rows
+      .filter((row) => discountUnitMatches(row, 46.09))
+      .reduce((sum, row) => sum + row.qty, 0),
+    discoveryWinter: rows
+      .filter((row) => discountUnitMatches(row, 67.83))
+      .reduce((sum, row) => sum + row.qty, 0),
+    magicD5: 0,
+    mmt: rows
+      .filter((row) => discountUnitMatches(row, 100.01))
+      .reduce((sum, row) => sum + row.qty, 0),
   };
 }
 
 function extractDiscountBundleCountsFromRows(rows) {
   return {
     pinkMusk: rows
-      .filter((row) => row.amount < 0)
       .filter((row) => isOrderDiscountName(row.product))
-      .filter((row) => getDiscountOfferUnits(row, 46.09))
-      .reduce((sum, row) => sum + getDiscountOfferUnits(row, 46.09), 0),
+      .filter((row) => discountUnitMatches(row, 46.09))
+      .reduce((sum, row) => sum + row.qty, 0),
     discoveryWinter: rows
-      .filter((row) => row.amount < 0)
       .filter((row) => isOrderDiscountName(row.product))
-      .filter((row) => getDiscountOfferUnits(row, 67.83))
-      .reduce((sum, row) => sum + getDiscountOfferUnits(row, 67.83), 0),
+      .filter((row) => discountUnitMatches(row, 67.83))
+      .reduce((sum, row) => sum + row.qty, 0),
     magicD5: rows
-      .filter((row) => row.amount < 0)
       .filter((row) => isOrder100DiscountName(row.product))
-      .filter((row) => getDiscountOfferUnits(row, 21.74))
-      .reduce((sum, row) => sum + getDiscountOfferUnits(row, 21.74), 0),
+      .filter((row) => discountUnitMatches(row, 21.74))
+      .reduce((sum, row) => sum + row.qty, 0),
     mmt: rows
-      .filter((row) => row.amount < 0)
-      .filter((row) => isMmtBundleDiscount(row))
-      .reduce((sum, row) => sum + getMmtBundleUnits(row), 0),
+      .filter((row) => isMmtBundleName(row.product))
+      .filter((row) => discountUnitMatches(row, 100.01))
+      .reduce((sum, row) => sum + row.qty, 0),
   };
 }
 
@@ -1008,46 +689,40 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const d5Box = sumQtyByMappedProduct(countProducts, "d5Box");
   const magicD5Bundle = discountBundleCounts.magicD5 ?? 0;
   const tawziat = sumQtyByMappedProduct(countProducts, "tawziatCollection");
-  const d1Box = sumQtyByMappedProduct(countProducts, "d1Box");
-  const mmtBundleFromOffers = offerReviewRows
-    .filter((row) => isMmtBundleDiscount(row))
-    .reduce((sum, row) => sum + getMmtBundleUnits(row), 0);
-  const mmtBundle = Math.max(discountBundleCounts.mmt ?? 0, mmtBundleFromOffers);
+  const mmtBundle = discountBundleCounts.mmt ?? 0;
   const makeupSales = sumAmountByBarcodes(countProducts, makeupBarcodes);
   const tawziyatBoxSolo = sumQtyByMappedProduct(countProducts, "tawziyatBoxSolo");
 
-  currentExtractText = `Store Name:
+  currentExtractText = `● ALMAHMAL ●
 
 ${formatDateForExtract(date)}
 
-Sales : ${formatPlainMoney(salesForAdt)}
-ADT : ${formatPlainNumber(adt)}
-AT : ${formatPlainNumber(at)}
-UPT: ${formatPlainNumber(upt)}
-Cash : N/A
------------------
-Pinkoctober:${formatPlainNumber(pink)}
-Musk collection:${formatPlainNumber(muskCollection)}
-Winter collection:${formatPlainNumber(winterCollection)}
-Magic of Layering:${formatPlainNumber(magicLayering)}
-Tawziat collection:${formatPlainNumber(tawziat)}
-D1:${formatPlainNumber(d1Box)}
-D4:${formatPlainNumber(discoveryBlack)}
-D5:${formatPlainNumber(d5Box)}
-------------------—
-Musk+Mag+Taw Bundle:${formatPlainNumber(mmtBundle)}
-Pink+Musk Bundle:${formatPlainNumber(pinkMuskBundle)}
-W+D4+Angel Bundle:${formatPlainNumber(discoveryWinterBundle)}
-Magic+D5 Bundle:${formatPlainNumber(magicD5Bundle)}
-Vintage Bundle:0
-Vibes Bundle:0
-------------------—
-———————————
-*MAKEUP: ${makeupSales ? formatPlainMoney(makeupSales) : "0"}
-———————————
-JAHEZ : N/A
-JAHEZ ADT : N/A
-———————————`;
+- Sales : ${formatPlainMoney(salesForAdt)}
+- ADT : ${formatPlainNumber(adt)}
+- AT : ${formatPlainNumber(at)}
+- UPT : ${formatPlainNumber(upt)}
+- Cash : N/A
+------------------
+- Pinkoctober :${formatPlainNumber(pink)}
+- Musk collection :${formatPlainNumber(muskCollection)}
+- Bundle (P+M) :${formatPlainNumber(pinkMuskBundle)}
+------------------
+- Discovery Black :${formatPlainNumber(discoveryBlack)}
+- Winter collection :${formatPlainNumber(winterCollection)}
+- Bundle ( D + W) :${formatPlainNumber(discoveryWinterBundle)}
+------------------
+- Magic of Layering : ${formatPlainNumber(magicLayering)}
+- D5 Box :${formatPlainNumber(d5Box)}
+- Bundle(M+D) : ${formatPlainNumber(magicD5Bundle)}
+------------------
+- Tawziat collection :${formatPlainNumber(tawziat)}
+- MMT Bundle : ${formatPlainNumber(mmtBundle)}
+------------------
+- MAKEUP SALES  : ${makeupSales ? formatPlainMoney(makeupSales) : "0"}
+Tawziyat Box solo : ${formatPlainNumber(tawziyatBoxSolo)}
+------------------
+- Jahez sales  : N/A
+- ADT :N/A`;
 
   els.dailyExtract.textContent = currentExtractText;
   renderCalculationReview({ pdfQuantityTotal, offerQty: offerDiscountQuantityTotal, adt, at, uptBaseQty, upt });
@@ -1082,14 +757,11 @@ function renderOfferRows() {
     return;
   }
 
-  const reviewedOfferQuantityTotal = offerReviewRows.reduce((sum, row) => sum + getReviewedOfferUnits(row), 0);
-  const reviewedOfferAmountTotal = offerReviewRows.reduce((sum, row) => sum + row.amount, 0);
-
   for (const row of offerReviewRows) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${escapeHtml(getOfferLabel(row))}</td>
-      <td>${formatPlainNumber(getReviewedOfferUnits(row))}</td>
+      <td>${formatPlainNumber(row.qty)}</td>
       <td>${moneyFormatter.format(row.amount)} ر.س</td>
     `;
     els.offerRowsBody.appendChild(tr);
@@ -1099,21 +771,10 @@ function renderOfferRows() {
   total.className = "offer-total-row";
   total.innerHTML = `
     <td>الإجمالي</td>
-    <td>${formatPlainNumber(reviewedOfferQuantityTotal)}</td>
-    <td>${moneyFormatter.format(reviewedOfferAmountTotal)} ر.س</td>
+    <td>${formatPlainNumber(offerDiscountQuantityTotal)}</td>
+    <td>${moneyFormatter.format(offerReviewRows.reduce((sum, row) => sum + row.amount, 0))} ر.س</td>
   `;
   els.offerRowsBody.appendChild(total);
-
-  if (offerCategorySummary && Math.abs(offerCategorySummary.qty - reviewedOfferQuantityTotal) > 0.01) {
-    const pdfTotal = document.createElement("tr");
-    pdfTotal.className = "offer-total-row";
-    pdfTotal.innerHTML = `
-      <td>\u0625\u062c\u0645\u0627\u0644\u064a PDF</td>
-      <td>${formatPlainNumber(offerCategorySummary.qty)}</td>
-      <td>${moneyFormatter.format(offerCategorySummary.amount)} \u0631.\u0633</td>
-    `;
-    els.offerRowsBody.appendChild(pdfTotal);
-  }
 }
 
 function updateOrders(value) {
@@ -1253,45 +914,20 @@ function renderTable(products) {
   });
 }
 
-document.querySelectorAll('label[for="pdfInput"]').forEach((trigger) => {
-  trigger.addEventListener("click", (event) => {
-    event.preventDefault();
-    els.input.value = "";
-    els.input.click();
-  });
-});
-
-els.input.addEventListener("click", () => {
-  els.input.value = "";
-});
-
 els.input.addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
 
   try {
-    showReportShell();
-    showExtractProgress(`تم اختيار الملف من الجوال.
-
-${file.name}
-
-جاري تجهيز الملف وقراءة جدول المبيعات...`);
-    const bytes = await readFileBuffer(file);
-    lastPdfBytes = copyArrayBuffer(bytes);
+    const bytes = await file.arrayBuffer();
+    lastPdfBytes = bytes.slice(0);
     lastPdfName = file.name;
-    await analyzePdfWithAutomaticOcr(bytes, file.name);
+    await analyzePdf({ data: bytes }, file.name);
   } catch (error) {
     console.error(error);
-    const message = userFacingError(error);
     setOcrRetryVisible(Boolean(lastPdfBytes));
-    showReportShell();
-    els.dailyExtract.textContent = `تعذر إنشاء المستخرج اليومي.
-
-السبب: ${message}
-
-جرّب زر إعادة التحليل OCR، أو أعد تصدير ملف PDF من النظام ثم ارفعه من جديد.`;
-    els.calculationReview.textContent = "لم يتم حساب UPT لأن تحليل PDF لم يكتمل.";
-    setStatus(message, "error");
+    document.body.classList.add("has-report");
+    setStatus(`تعذر تحليل الملف. السبب: ${error?.message || "غير معروف"}. جرّب زر إعادة التحليل OCR أو أعد تصدير PDF بجودة أوضح.`, "error");
   }
 });
 
@@ -1299,19 +935,12 @@ els.ocrRetryButton.addEventListener("click", async () => {
   if (!lastPdfBytes) return;
 
   try {
-    await analyzePdf({ data: copyArrayBuffer(lastPdfBytes) }, lastPdfName || "PDF", { forceOcr: true });
+    await analyzePdf({ data: lastPdfBytes.slice(0) }, lastPdfName || "PDF", { forceOcr: true });
   } catch (error) {
     console.error(error);
-    const message = userFacingError(error);
     setOcrRetryVisible(true);
-    showReportShell();
-    els.dailyExtract.textContent = `فشل إنشاء المستخرج حتى بعد OCR.
-
-السبب: ${message}
-
-الحل الأسرع: افتح التقرير من الجوال، ثم استخدم مشاركة / طباعة / حفظ كـ PDF أو أعد تصديره من جهاز الكمبيوتر.`;
-    els.calculationReview.textContent = "لم يتم حساب UPT لأن OCR لم يتمكن من قراءة جدول PDF.";
-    setStatus(message, "error");
+    document.body.classList.add("has-report");
+    setStatus(`فشل OCR أيضًا. السبب: ${error?.message || "غير معروف"}. جرّب PDF أوضح أو افتح الملف ثم صدّره PDF من جديد.`, "error");
   }
 });
 
@@ -1327,7 +956,10 @@ els.orderSalesInput.addEventListener("input", () => {
 
 document.querySelectorAll(".tab-button").forEach((button) => {
   button.addEventListener("click", () => {
-    activateView(button.dataset.view);
+    document.querySelectorAll(".tab-button").forEach((item) => item.classList.remove("active"));
+    document.querySelectorAll(".app-view").forEach((view) => view.classList.remove("active"));
+    button.classList.add("active");
+    document.querySelector(`#${button.dataset.view}`).classList.add("active");
   });
 });
 

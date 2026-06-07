@@ -4,26 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>لوحة تحليل تقارير المبيعات PDF</title>
-    <meta name="theme-color" content="#117e74" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="MATCH" />
-    <link rel="manifest" href="./manifest.webmanifest?v=20260529-2" />
-    <link rel="apple-touch-icon" sizes="180x180" href="./assets/match-icon-180.png?v=20260529-2" />
-    <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon-32.png?v=20260529-2" />
-    <link rel="stylesheet" href="./styles.css?v=20260529-12" />
+    <link rel="stylesheet" href="./styles.css?v=20260529-2" />
   </head>
   <body>
-    <div class="credit-toast" role="status" aria-live="polite">
-      <img src="./assets/match-home-logo.png?v=20260529-2" alt="MATCH" />
-      <span>تم عمل هذا الموقع بواسطة الموظف / محمد الحميدي 2026</span>
-    </div>
     <main class="app-shell">
       <section class="hero">
         <div class="hero-copy">
           <p class="eyebrow">MATCH SALES INTELLIGENCE</p>
           <h1>داشبورد متجر ماتش</h1>
           <p class="hero-subtitle">
-            مساحة عمل يومية لقراءة تقرير PDF، تحويله إلى مؤشرات واضحة، وتجهيز المستخرج اليومي.
+            مساحة عمل يومية لقراءة تقرير PDF، تحويله إلى مؤشرات واضحة، وتجهيز المستخرج اليومي بدون ضجيج.
           </p>
           <div class="hero-actions">
             <label class="upload-button" for="pdfInput">
@@ -31,7 +21,7 @@
               اختيار ملف PDF
             </label>
             <button id="ocrRetryButton" class="secondary-button" type="button" hidden>إعادة التحليل OCR</button>
-            <input id="pdfInput" type="file" accept=".pdf,application/pdf" />
+            <input id="pdfInput" type="file" accept="application/pdf" />
             <span id="reportMeta" class="report-pill">بانتظار التقرير</span>
           </div>
         </div>
@@ -242,8 +232,6 @@
       </section>
     </main>
 
-    <script src="./safari-polyfills.js?v=20260529-2"></script>
-    <script src="./vendor/pdf.legacy.min.js?v=2.16.105"></script>
-    <script type="module" src="./app.js?v=20260606-3"></script>
+    <script type="module" src="./app.js?v=20260529-7"></script>
   </body>
 </html>
