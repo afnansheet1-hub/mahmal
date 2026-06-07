@@ -344,7 +344,11 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
   }
 
   latestPdfText = pageTexts.join("\n");
-  offerReviewRows = rows.filter((row) => isCountableOfferDiscount(row));
+  offerReviewRows = mergeOfferRows(
+    rows.filter((row) => isCountableOfferDiscount(row)),
+    extractOfferRowsFromPdfText(latestPdfText),
+    extractOfferRowsFromPdfText(rawPageTexts.join("\n")),
+  );
   offerDiscountQuantityTotal = offerReviewRows.reduce((sum, row) => sum + row.qty, 0);
   pdfGrandQuantityTotal = extractPdfGrandQuantityTotal(rows);
   allExtractProducts = mergeContinuationRows(rows);
@@ -353,7 +357,7 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
   aiOfferDiscountQty = null;
   discountBundleCounts = mergeDiscountBundleCounts(
     extractDiscountBundleCounts(rawPageTexts.join("\n")),
-    extractDiscountBundleCountsFromRows(rows),
+    extractDiscountBundleCountsFromRows(offerReviewRows),
   );
   mappedDailyQuantities = extractMappedDailyQuantities(latestPdfText);
   renderDashboard(pdf.numPages, allProducts, latestPdfText, name);
@@ -390,7 +394,7 @@ async function analyzePdf(source, name, options = {}) {
       const content = await page.getTextContent();
       rawPageTexts.push(content.items.map((item) => item.str).join("\n"));
       const lines = groupItemsByLine(content.items);
-      pageTexts.push(lines.map((line) => line.text).join(" "));
+      pageTexts.push(lines.map((line) => line.text).join("\n"));
       for (const line of lines) {
         const row = rowFromLine(line);
         if (row) rows.push(row);
@@ -536,6 +540,81 @@ function sumOrder100DiscountUnits(rows) {
     .filter((row) => isCountableOfferDiscount(row))
     .filter((row) => isOrder100DiscountName(row.product))
     .reduce((sum, row) => sum + countOrder100DiscountUnits(row), 0);
+}
+
+function parseNegativeAmountNearOffer(text) {
+  const matches = [
+    ...text.matchAll(/-\s*([\d,]+\.\d{2})/g),
+    ...text.matchAll(/([\d,]+\.\d{2})\s*-/g),
+  ];
+  const values = matches
+    .map((match) => Number((match[1] || "").replace(/,/g, "")))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return values.length ? -Math.max(...values) : null;
+}
+
+function parseQtyNearOffer(text) {
+  const qtyValues = [...text.matchAll(/(?:^|\s)(-?\d+(?:\.\d)?)(?:\s|$)/g)]
+    .map((match) => Number(match[1]))
+    .filter((value) => Number.isFinite(value) && value > 0 && value < 10000 && Math.abs(value - 100) > 0.01);
+  return qtyValues.length ? Math.max(...qtyValues) : null;
+}
+
+function extractOfferRowsFromPdfText(text) {
+  const lines = normalizeDigits(text)
+    .replace(/\u200b/g, " ")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const rows = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!isOrder100DiscountName(lines[index])) continue;
+
+    const candidates = [
+      [lines[index]],
+      [lines[index - 1], lines[index]],
+      [lines[index], lines[index + 1]],
+      [lines[index - 2], lines[index - 1], lines[index]],
+      [lines[index], lines[index + 1], lines[index + 2]],
+      [lines[index - 1], lines[index], lines[index + 1]],
+    ]
+      .map((parts) => parts.filter(Boolean).join(" "))
+      .filter(Boolean);
+    const matchedText = candidates.find((candidate) => {
+      return parseNegativeAmountNearOffer(candidate) !== null && parseQtyNearOffer(candidate) !== null;
+    });
+    if (!matchedText) continue;
+
+    const amount = parseNegativeAmountNearOffer(matchedText);
+    const qty = parseQtyNearOffer(matchedText);
+
+    if (amount !== null && qty !== null) {
+      rows.push({
+        product: "on your order 100%",
+        barcode: "",
+        qty,
+        amount,
+        unitPrice: amount / qty,
+        rawText: matchedText,
+      });
+    }
+  }
+
+  return rows;
+}
+
+function mergeOfferRows(...groups) {
+  const merged = [];
+  const seen = new Set();
+  for (const row of groups.flat()) {
+    if (!isCountableOfferDiscount(row)) continue;
+    const key = `${normalizeName(row.product)}|${row.qty}|${row.amount.toFixed(2)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(row);
+  }
+  return merged;
 }
 
 function discountUnitMatches(row, target) {
