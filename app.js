@@ -101,6 +101,7 @@ let discountBundleCounts = {
 };
 let offerReviewRows = [];
 let discountReviewRows = [];
+let offersSummary = [];
 let offerDiscountQuantityTotal = 0;
 let pdfGrandQuantityTotal = null;
 let lastPdfSalesTotal = 0;
@@ -123,12 +124,9 @@ function ensureOfferSummaryTables() {
   const offerHeadRow = offerTable?.querySelector("thead tr");
   if (offerHeadRow) {
     offerHeadRow.innerHTML = `
-      <th>Offer Name</th>
-      <th>Discount Code</th>
-      <th>Invoice / Order</th>
-      <th>Unit Discount</th>
-      <th>Total Discount</th>
-      <th>Repeat Count</th>
+      <th>Ø§Ù„Ø¹Ø±Ø¶</th>
+      <th>Ø§Ù„ÙƒÙ…ÙŠØ©</th>
+      <th>Ø§Ù„Ù‚ÙŠÙ…Ø©</th>
     `;
   }
 
@@ -161,6 +159,7 @@ function resetEmptyState() {
   hasReport = false;
   offerReviewRows = [];
   discountReviewRows = [];
+  offersSummary = [];
   offerDiscountQuantityTotal = 0;
   pdfGrandQuantityTotal = null;
   document.body.classList.remove("has-report");
@@ -429,7 +428,11 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
   const offerSummaries = buildOfferAndDiscountSummaries(rows, pageTexts, rawPageTexts);
   offerReviewRows = offerSummaries.offers;
   discountReviewRows = offerSummaries.unmatchedDiscounts;
-  offerDiscountQuantityTotal = offerReviewRows.reduce((sum, row) => sum + row.repeatCount, 0);
+  offersSummary = buildPdfOfferRowsSummary(rows, pageTexts, rawPageTexts);
+  if (!offersSummary.length) {
+    offersSummary = extractPdfOfferRowsSummaryFromText(pageTexts, rawPageTexts);
+  }
+  offerDiscountQuantityTotal = offersSummary.reduce((sum, offer) => sum + offer.qty, 0);
   pdfGrandQuantityTotal = extractPdfGrandQuantityTotal(rows);
   allExtractProducts = mergeContinuationRows(rows);
   allProducts = allExtractProducts.filter((row) => row.amount > 0);
@@ -564,6 +567,11 @@ function isReturnText(value) {
   return /return|refund|returned|reverse|reversal|مرتجع|مرتجعات|استرجاع|استرداد/i.test(normalizeDigits(value));
 }
 
+function isReturnPageText(value) {
+  const text = normalizeDigits(value);
+  return /\u0645\u0631\u062a\u062c\u0639|\u0645\u0631\u062a\u062c\u0639\u0627\u062a|\u0627\u0633\u062a\u0631\u062c\u0627\u0639|\u0627\u0633\u062a\u0631\u062f\u0627\u062f|\u0627\u0644\u0627\u0633\u062a\u0631\u062f\u0627\u062f\u0627\u062a/.test(text);
+}
+
 function extractInvoiceNumber(text, fallback = "N/A") {
   const normalized = normalizeDigits(text).replace(/\s+/g, " ");
   const patterns = [
@@ -619,6 +627,169 @@ function isDiscountRowForSummary(row, pageTexts = [], rawPageTexts = []) {
     Boolean(discountCodeFromProduct(row.product)) &&
     isOrderDiscountName(row.product)
   );
+}
+
+function buildPdfOfferRowsSummary(rows, pageTexts = [], rawPageTexts = []) {
+  const summary = {
+    name: "on your order 100%",
+    qty: 0,
+    value: 0,
+  };
+
+  for (const row of rows) {
+    const sourceText = `${row.rawText || ""} ${row.product || ""} ${pageTextForRow(row, pageTexts, rawPageTexts)}`;
+    if (isReturnText(sourceText) || isReturnPageText(sourceText)) continue;
+    if (discountCodeFromProduct(row.product) !== "on your order 100%") continue;
+    if (row.amount >= 0) continue;
+    summary.qty += row.qty || 0;
+    summary.value += row.amount || 0;
+  }
+
+  summary.qty = Number(summary.qty.toFixed(2));
+  summary.value = Number(summary.value.toFixed(2));
+  return summary.qty > 0 ? [summary] : [];
+}
+
+function extractNegativeOfferAmount(text) {
+  const normalized = normalizeDigits(text);
+  const matches = [
+    ...normalized.matchAll(/-\s*([\d,]+\.\d{2})/g),
+    ...normalized.matchAll(/([\d,]+\.\d{2})\s*-/g),
+  ]
+    .map((match) => Number((match[1] || "").replace(/,/g, "")))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return matches.length ? -Math.max(...matches) : null;
+}
+
+function extractOfferQtyFromText(text, amount) {
+  const amountAbs = Math.abs(amount || 0);
+  const values = [...normalizeDigits(text).matchAll(/(?:^|\s)(\d+(?:\.\d)?)(?:\s|$)/g)]
+    .map((match) => Number(match[1]))
+    .filter((value) => {
+      return (
+        Number.isFinite(value) &&
+        value > 0 &&
+        value < 10000 &&
+        Math.abs(value - 100) > 0.01 &&
+        Math.abs(value - amountAbs) > 0.01
+      );
+    });
+  return values.length ? Math.max(...values) : null;
+}
+
+function closestNegativeOfferAmount(text, anchorIndex) {
+  const normalized = normalizeDigits(text);
+  const matches = [
+    ...normalized.matchAll(/-\s*([\d,]+\.\d{2})/g),
+    ...normalized.matchAll(/([\d,]+\.\d{2})\s*-/g),
+  ]
+    .map((match) => ({
+      value: -Number((match[1] || "").replace(/,/g, "")),
+      distance: Math.abs(match.index - anchorIndex),
+    }))
+    .filter((match) => Number.isFinite(match.value) && match.value < 0)
+    .sort((a, b) => a.distance - b.distance);
+  return matches[0]?.value ?? null;
+}
+
+function closestOfferQty(text, anchorIndex, amount) {
+  const amountAbs = Math.abs(amount || 0);
+  const matches = [...normalizeDigits(text).matchAll(/(?:^|\s)(\d+(?:\.\d)?)(?:\s|$)/g)]
+    .map((match) => ({
+      value: Number(match[1]),
+      distance: Math.abs(match.index - anchorIndex),
+    }))
+    .filter((match) => {
+      return (
+        Number.isFinite(match.value) &&
+        match.value > 0 &&
+        match.value < 10000 &&
+        Math.abs(match.value - 100) > 0.01 &&
+        Math.abs(match.value - amountAbs) > 0.01
+      );
+    })
+    .sort((a, b) => a.distance - b.distance);
+  return matches[0]?.value ?? null;
+}
+
+function addOfferSummaryLine(summary, seen, pageIndex, line, keySuffix = "") {
+  if (!/on\s+your\s+order\s+100\s*%/i.test(line)) return false;
+  if (isReturnText(line) || isReturnPageText(line)) return false;
+  const amount = extractNegativeOfferAmount(line);
+  if (amount === null) return false;
+  const qty = extractOfferQtyFromText(line, amount);
+  if (qty === null) return false;
+  const dedupeKey = `${pageIndex}|line|${qty}|${amount.toFixed(2)}|${keySuffix || line}`;
+  if (seen.has(dedupeKey)) return true;
+  seen.add(dedupeKey);
+  summary.qty += qty;
+  summary.value += amount;
+  return true;
+}
+
+function extractPdfOfferRowsSummaryFromText(pageTexts = [], rawPageTexts = []) {
+  const summary = {
+    name: "on your order 100%",
+    qty: 0,
+    value: 0,
+  };
+  const seen = new Set();
+  const pageCount = Math.max(pageTexts.length, rawPageTexts.length);
+
+  for (let index = 0; index < pageCount; index += 1) {
+    const pageText = `${rawPageTexts[index] || ""}\n${pageTexts[index] || ""}`;
+    if (isReturnText(pageText) || isReturnPageText(pageText)) continue;
+
+    const normalized = normalizeDigits(pageText).replace(/\u200b/g, " ");
+    let matchedLine = false;
+    const lines = normalized
+      .split(/\r?\n/)
+      .map((line) => line.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+      const line = lines[lineIndex];
+      if (!/on\s+your\s+order\s+100\s*%/i.test(line)) continue;
+      const candidates = [
+        line,
+        `${lines[lineIndex - 1] || ""} ${line}`.trim(),
+        `${line} ${lines[lineIndex + 1] || ""}`.trim(),
+        `${lines[lineIndex - 1] || ""} ${line} ${lines[lineIndex + 1] || ""}`.trim(),
+        `${lines[lineIndex - 2] || ""} ${lines[lineIndex - 1] || ""} ${line}`.trim(),
+        `${line} ${lines[lineIndex + 1] || ""} ${lines[lineIndex + 2] || ""}`.trim(),
+      ].filter(Boolean);
+      for (const candidate of candidates) {
+        if (addOfferSummaryLine(summary, seen, index, candidate, `${lineIndex}|${candidate}`)) {
+          matchedLine = true;
+          break;
+        }
+      }
+    }
+    if (matchedLine) continue;
+
+    const pattern = /on\s+your\s+order\s+100\s*%/gi;
+    let match;
+    while ((match = pattern.exec(normalized)) !== null) {
+      const start = Math.max(0, match.index - 140);
+      const end = Math.min(normalized.length, match.index + match[0].length + 140);
+      const segment = normalized.slice(start, end);
+      if (isReturnText(segment) || isReturnPageText(segment)) continue;
+
+      const amount = closestNegativeOfferAmount(segment, match.index - start);
+      if (amount === null) continue;
+      const qty = closestOfferQty(segment, match.index - start, amount);
+      if (qty === null) continue;
+
+      const dedupeKey = `${index}|${qty}|${amount.toFixed(2)}|${match.index}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      summary.qty += qty;
+      summary.value += amount;
+    }
+  }
+
+  summary.qty = Number(summary.qty.toFixed(2));
+  summary.value = Number(summary.value.toFixed(2));
+  return summary.qty > 0 ? [summary] : [];
 }
 
 function buildOfferAndDiscountSummaries(rows, pageTexts = [], rawPageTexts = []) {
@@ -877,8 +1048,6 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const adt = orders || fallbackAt;
   const at = adt ? salesForAdt / adt : 0;
   const pdfQuantityTotal = pdfGrandQuantityTotal ?? aiPdfTotalQty ?? totalQty;
-  const uptBaseQty = Math.max(0, pdfQuantityTotal - offerDiscountQuantityTotal);
-  const upt = adt ? uptBaseQty / adt : 0;
   const pink = sumQtyByKeywords(countProducts, ["pink", "pinko"]);
   const muskCollection = sumQtyByMappedProduct(countProducts, "muskCollection");
   const pinkMuskBundle = discountBundleCounts.pinkMusk ?? 0;
@@ -892,6 +1061,11 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const mmtBundle = discountBundleCounts.mmt ?? 0;
   const makeupSales = sumAmountByBarcodes(countProducts, makeupBarcodes);
   const tawziyatBoxSolo = sumQtyByMappedProduct(countProducts, "tawziyatBoxSolo");
+  const d1Box = sumQtyByMappedProduct(countProducts, "d1Box");
+  const offersQty = offersSummary.reduce((sum, offer) => sum + offer.qty, 0);
+  offerDiscountQuantityTotal = offersQty;
+  const uptBaseQty = Math.max(0, pdfQuantityTotal - offersQty);
+  const upt = adt ? uptBaseQty / adt : 0;
 
   currentExtractText = `● ALMAHMAL ●
 
@@ -918,6 +1092,7 @@ ${formatDateForExtract(date)}
 - Tawziat collection :${formatPlainNumber(tawziat)}
 - MMT Bundle : ${formatPlainNumber(mmtBundle)}
 ------------------
+- D1 :${formatPlainNumber(d1Box)}
 - MAKEUP SALES  : ${makeupSales ? formatPlainMoney(makeupSales) : "0"}
 Tawziyat Box solo : ${formatPlainNumber(tawziyatBoxSolo)}
 ------------------
@@ -979,18 +1154,26 @@ function renderOfferRows() {
 
 function renderOfferSummaryRows() {
   els.offerRowsBody.innerHTML = "";
-  if (!offerReviewRows.length) {
-    els.offerRowsBody.innerHTML = "<tr><td colspan='6'>No matched offers found in PDF.</td></tr>";
+  if (els.discountRowsBody) {
+    els.discountRowsBody.innerHTML = "<tr><td colspan='3'></td></tr>";
+  }
+  if (!offersSummary.length) {
+    els.offerRowsBody.innerHTML = "<tr><td colspan='3'>لا توجد عروض مطابقة داخل PDF</td></tr>";
   } else {
-    for (const row of offerReviewRows) {
+    for (const row of offersSummary) {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${escapeHtml(row.offerName)}</td>
-        <td>${escapeHtml(row.discountCode)}</td>
-        <td>${escapeHtml(row.invoiceNumber)}</td>
+        <td>${escapeHtml(row.name)}</td>
+        <td>${formatPlainNumber(row.qty)}</td>
+        <td>${moneyFormatter.format(row.value)} ر.س</td>
         <td>${moneyFormatter.format(row.unitDiscount)} Ø±.Ø³</td>
         <td>${moneyFormatter.format(row.totalDiscount)} Ø±.Ø³</td>
         <td>${formatPlainNumber(row.repeatCount)}</td>
+      `;
+      tr.innerHTML = `
+        <td>${escapeHtml(row.name)}</td>
+        <td>${formatPlainNumber(row.qty)}</td>
+        <td>${moneyFormatter.format(row.value)} ر.س</td>
       `;
       els.offerRowsBody.appendChild(tr);
     }
@@ -1002,9 +1185,15 @@ function renderOfferSummaryRows() {
       <td>${moneyFormatter.format(offerReviewRows.reduce((sum, row) => sum + row.totalDiscount, 0))} Ø±.Ø³</td>
       <td>${formatPlainNumber(offerDiscountQuantityTotal)}</td>
     `;
+    total.innerHTML = `
+      <td>الإجمالي</td>
+      <td>${formatPlainNumber(offersSummary.reduce((sum, row) => sum + row.qty, 0))}</td>
+      <td>${moneyFormatter.format(offersSummary.reduce((sum, row) => sum + row.value, 0))} ر.س</td>
+    `;
     els.offerRowsBody.appendChild(total);
   }
 
+  return;
   if (!els.discountRowsBody) return;
   els.discountRowsBody.innerHTML = "";
   if (!discountReviewRows.length) {
