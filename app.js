@@ -102,6 +102,7 @@ let discountBundleCounts = {
 let offerReviewRows = [];
 let discountReviewRows = [];
 let offersSummary = [];
+const dailyOffers = [];
 let offerDiscountQuantityTotal = 0;
 let pdfGrandQuantityTotal = null;
 let lastPdfSalesTotal = 0;
@@ -160,6 +161,7 @@ function resetEmptyState() {
   offerReviewRows = [];
   discountReviewRows = [];
   offersSummary = [];
+  dailyOffers.length = 0;
   offerDiscountQuantityTotal = 0;
   pdfGrandQuantityTotal = null;
   document.body.classList.remove("has-report");
@@ -387,7 +389,11 @@ function getOcrScale(pdf) {
 }
 
 async function extractRowsWithOcr(pdf) {
-  const { createWorker } = await import("./vendor/tesseract.esm.min.js");
+  const tesseractModule = await import("./vendor/tesseract.esm.min.js");
+  const createWorker = tesseractModule.createWorker || tesseractModule.default?.createWorker;
+  if (typeof createWorker !== "function") {
+    throw new Error("Tesseract createWorker is not available");
+  }
   const worker = await createWorker("eng+ara", 1, {
     workerPath: new URL("./vendor/tesseract-worker.min.js", import.meta.url).href,
     langPath: "https://tessdata.projectnaptha.com/4.0.0",
@@ -424,15 +430,15 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
     throw new Error("No analyzable rows found");
   }
 
+  const rawText = rawPageTexts.length ? rawPageTexts.join("\n\f\n") : pageTexts.join("\n\f\n");
   latestPdfText = pageTexts.join("\n");
   const offerSummaries = buildOfferAndDiscountSummaries(rows, pageTexts, rawPageTexts);
   offerReviewRows = offerSummaries.offers;
   discountReviewRows = offerSummaries.unmatchedDiscounts;
-  offersSummary = buildPdfOfferRowsSummary(rows, pageTexts, rawPageTexts);
-  if (!offersSummary.length) {
-    offersSummary = extractPdfOfferRowsSummaryFromText(pageTexts, rawPageTexts);
-  }
-  offerDiscountQuantityTotal = offersSummary.reduce((sum, offer) => sum + offer.qty, 0);
+  dailyOffers.length = 0;
+  dailyOffers.push(...extractOnYourOrderOffers(rawText));
+  offersSummary = dailyOffers;
+  offerDiscountQuantityTotal = dailyOffers.reduce((sum, offer) => sum + offer.qty, 0);
   pdfGrandQuantityTotal = extractPdfGrandQuantityTotal(rows);
   allExtractProducts = mergeContinuationRows(rows);
   allProducts = allExtractProducts.filter((row) => row.amount > 0);
@@ -792,6 +798,111 @@ function extractPdfOfferRowsSummaryFromText(pageTexts = [], rawPageTexts = []) {
   return summary.qty > 0 ? [summary] : [];
 }
 
+function extractOnYourOrderOffers(rawText) {
+  const pages = String(rawText || "").split(/\f+/);
+  const matches = [];
+  const seenAnchors = new Set();
+  let totalOfferQty = 0;
+  let totalOfferValue = 0;
+
+  for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
+    const pageText = normalizeDigits(pages[pageIndex] || "").replace(/\u200b/g, " ");
+    if (!pageText.trim() || isReturnText(pageText) || isReturnPageText(pageText)) continue;
+
+    const lines = pageText
+      .split(/\r?\n/)
+      .map((line) => line.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+      const line = lines[lineIndex];
+      if (!/on\s+your\s+order\s+100\s*%/i.test(line)) continue;
+      if (isReturnText(line) || isReturnPageText(line)) continue;
+
+      const candidates = [
+        line,
+        `${line} ${lines[lineIndex + 1] || ""}`.trim(),
+        `${lines[lineIndex - 1] || ""} ${line}`.trim(),
+        `${lines[lineIndex - 1] || ""} ${line} ${lines[lineIndex + 1] || ""}`.trim(),
+        `${lines[lineIndex - 2] || ""} ${lines[lineIndex - 1] || ""} ${line}`.trim(),
+        `${line} ${lines[lineIndex + 1] || ""} ${lines[lineIndex + 2] || ""}`.trim(),
+      ].filter(Boolean);
+
+      let parsed = null;
+      for (const candidate of candidates) {
+        if (isReturnText(candidate) || isReturnPageText(candidate)) continue;
+        const amount = extractNegativeOfferAmount(candidate);
+        if (amount === null) continue;
+        const qty = extractOfferQtyFromText(candidate, amount);
+        if (qty === null) continue;
+        parsed = { qty, value: amount, text: candidate };
+        break;
+      }
+
+      if (!parsed) continue;
+      const key = `${pageIndex}|${lineIndex}|${parsed.qty}|${parsed.value.toFixed(2)}`;
+      if (seenAnchors.has(key)) continue;
+      seenAnchors.add(key);
+      matches.push({
+        name: "on your order 100%",
+        qty: parsed.qty,
+        value: parsed.value,
+        page: pageIndex + 1,
+        text: parsed.text,
+      });
+      totalOfferQty += parsed.qty;
+      totalOfferValue += parsed.value;
+    }
+
+    const pattern = /on\s+your\s+order\s+100\s*%/gi;
+    let match;
+    while ((match = pattern.exec(pageText)) !== null) {
+      const anchorKey = `${pageIndex}|raw|${match.index}`;
+      if (seenAnchors.has(anchorKey)) continue;
+
+      const start = Math.max(0, match.index - 180);
+      const end = Math.min(pageText.length, match.index + match[0].length + 180);
+      const segment = pageText.slice(start, end).replace(/\s+/g, " ").trim();
+      if (isReturnText(segment) || isReturnPageText(segment)) continue;
+
+      const amount = closestNegativeOfferAmount(segment, match.index - start);
+      if (amount === null) continue;
+      const qty = closestOfferQty(segment, match.index - start, amount);
+      if (qty === null) continue;
+
+      const duplicate = matches.some(
+        (entry) => entry.page === pageIndex + 1 && Math.abs(entry.qty - qty) < 0.001 && Math.abs(entry.value - amount) < 0.001,
+      );
+      if (duplicate) continue;
+
+      seenAnchors.add(anchorKey);
+      matches.push({
+        name: "on your order 100%",
+        qty,
+        value: amount,
+        page: pageIndex + 1,
+        text: segment,
+      });
+      totalOfferQty += qty;
+      totalOfferValue += amount;
+    }
+  }
+
+  const result = [];
+  if (totalOfferQty > 0) {
+    result.push({
+      name: "on your order 100%",
+      qty: Number(totalOfferQty.toFixed(2)),
+      value: Number(totalOfferValue.toFixed(2)),
+    });
+  }
+
+  console.log("RAW PDF TEXT:", rawText);
+  console.log("ON YOUR ORDER MATCHES:", matches);
+  console.log("DAILY OFFERS:", result);
+  return result;
+}
+
 function buildOfferAndDiscountSummaries(rows, pageTexts = [], rawPageTexts = []) {
   const groups = new Map();
   const seen = new Set();
@@ -1062,7 +1173,7 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const makeupSales = sumAmountByBarcodes(countProducts, makeupBarcodes);
   const tawziyatBoxSolo = sumQtyByMappedProduct(countProducts, "tawziyatBoxSolo");
   const d1Box = sumQtyByMappedProduct(countProducts, "d1Box");
-  const offersQty = offersSummary.reduce((sum, offer) => sum + offer.qty, 0);
+  const offersQty = dailyOffers.reduce((sum, offer) => sum + offer.qty, 0);
   offerDiscountQuantityTotal = offersQty;
   const uptBaseQty = Math.max(0, pdfQuantityTotal - offersQty);
   const upt = adt ? uptBaseQty / adt : 0;
@@ -1157,10 +1268,10 @@ function renderOfferSummaryRows() {
   if (els.discountRowsBody) {
     els.discountRowsBody.innerHTML = "<tr><td colspan='3'></td></tr>";
   }
-  if (!offersSummary.length) {
+  if (!dailyOffers.length) {
     els.offerRowsBody.innerHTML = "<tr><td colspan='3'>لا توجد عروض مطابقة داخل PDF</td></tr>";
   } else {
-    for (const row of offersSummary) {
+    for (const row of dailyOffers) {
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${escapeHtml(row.name)}</td>
@@ -1187,8 +1298,8 @@ function renderOfferSummaryRows() {
     `;
     total.innerHTML = `
       <td>الإجمالي</td>
-      <td>${formatPlainNumber(offersSummary.reduce((sum, row) => sum + row.qty, 0))}</td>
-      <td>${moneyFormatter.format(offersSummary.reduce((sum, row) => sum + row.value, 0))} ر.س</td>
+      <td>${formatPlainNumber(dailyOffers.reduce((sum, row) => sum + row.qty, 0))}</td>
+      <td>${moneyFormatter.format(dailyOffers.reduce((sum, row) => sum + row.value, 0))} ر.س</td>
     `;
     els.offerRowsBody.appendChild(total);
   }
