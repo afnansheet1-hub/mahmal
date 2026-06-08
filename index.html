@@ -3,235 +3,97 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>لوحة تحليل تقارير المبيعات PDF</title>
-    <link rel="stylesheet" href="./styles.css?v=20260529-2" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>الموقع تحت الصيانة</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #0f1512;
+        --card: rgba(255, 255, 255, 0.94);
+        --ink: #14201b;
+        --muted: #66736c;
+        --accent: #0f766e;
+        --line: rgba(20, 32, 27, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        color: var(--ink);
+        font-family: Tahoma, Arial, sans-serif;
+        background:
+          linear-gradient(rgba(247, 249, 245, 0.84), rgba(247, 249, 245, 0.92)),
+          url("./assets/match-logo-bg.webp") center / min(920px, 94vw) auto no-repeat fixed,
+          var(--bg);
+      }
+
+      main {
+        width: min(620px, 100%);
+        padding: clamp(28px, 6vw, 54px);
+        text-align: center;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--card);
+        box-shadow: 0 24px 70px rgba(5, 15, 11, 0.18);
+      }
+
+      .logo {
+        width: 96px;
+        height: 96px;
+        object-fit: contain;
+        margin-bottom: 22px;
+      }
+
+      h1 {
+        margin: 0 0 14px;
+        font-size: clamp(28px, 5vw, 42px);
+        line-height: 1.25;
+        letter-spacing: 0;
+      }
+
+      p {
+        margin: 0 auto;
+        max-width: 440px;
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.9;
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 26px;
+        padding: 10px 16px;
+        border: 1px solid rgba(15, 118, 110, 0.22);
+        border-radius: 999px;
+        color: var(--accent);
+        background: rgba(15, 118, 110, 0.08);
+        font-weight: 700;
+      }
+
+      .status::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+    </style>
   </head>
   <body>
-    <main class="app-shell">
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">MATCH SALES INTELLIGENCE</p>
-          <h1>داشبورد متجر ماتش</h1>
-          <p class="hero-subtitle">
-            مساحة عمل يومية لقراءة تقرير PDF، تحويله إلى مؤشرات واضحة، وتجهيز المستخرج اليومي بدون ضجيج.
-          </p>
-          <div class="hero-actions">
-            <label class="upload-button" for="pdfInput">
-              <span aria-hidden="true">↑</span>
-              اختيار ملف PDF
-            </label>
-            <button id="ocrRetryButton" class="secondary-button" type="button" hidden>إعادة التحليل OCR</button>
-            <input id="pdfInput" type="file" accept="application/pdf" />
-            <span id="reportMeta" class="report-pill">بانتظار التقرير</span>
-          </div>
-        </div>
-
-        <div class="hero-card">
-          <span class="hero-label">الملف الحالي</span>
-          <strong id="fileName">لم يتم تحميل ملف</strong>
-          <div class="status-block">
-            <span id="statusDot" class="status-dot"></span>
-            <p id="statusText">ارفع ملف PDF لبدء التحليل وعرض القيم.</p>
-          </div>
-        </div>
-      </section>
-
-      <section class="kpi-grid" aria-label="ملخص المبيعات">
-        <article class="metric">
-          <span>عدد الصفحات</span>
-          <strong id="pageCount">-</strong>
-        </article>
-        <article class="metric primary">
-          <span>إجمالي المبيعات</span>
-          <strong id="totalSales">-</strong>
-        </article>
-        <article class="metric">
-          <span>إجمالي الكمية</span>
-          <strong id="totalQty">-</strong>
-        </article>
-        <article class="metric">
-          <span>عدد المنتجات</span>
-          <strong id="productCount">-</strong>
-        </article>
-        <article class="metric">
-          <span>متوسط سعر الوحدة</span>
-          <strong id="avgUnit">-</strong>
-        </article>
-        <article class="metric">
-          <span>أعلى كمية</span>
-          <strong id="topQty">-</strong>
-        </article>
-      </section>
-
-      <nav class="view-tabs" aria-label="تبويبات التقرير">
-        <button class="tab-button active" type="button" data-view="dashboardView">الداشبورد</button>
-        <button class="tab-button" type="button" data-view="extractView">المستخرج اليومي</button>
-      </nav>
-
-      <section class="empty-state" aria-label="حالة البداية">
-        <div class="empty-card">
-          <span class="empty-mark">PDF</span>
-          <h2>ابدأ برفع تقرير المبيعات</h2>
-          <p>بعد تحميل الملف ستظهر المؤشرات، الجدول، معاينة PDF، والمستخرج اليومي هنا تلقائيًا.</p>
-          <label class="upload-button" for="pdfInput">
-            <span aria-hidden="true">↑</span>
-            اختيار ملف PDF
-          </label>
-        </div>
-      </section>
-
-      <section id="dashboardView" class="workspace app-view active">
-        <section class="dashboard">
-          <div class="summary-grid">
-            <article class="panel chart-panel">
-              <div class="panel-heading">
-                <div>
-                  <p class="section-kicker">تحليل القيمة</p>
-                  <h2>أعلى المنتجات قيمة</h2>
-                </div>
-                <span id="chartHint">حسب الإجمالي بدون ضريبة</span>
-              </div>
-              <div id="barChart" class="bar-chart"></div>
-            </article>
-
-            <article class="panel insights-panel">
-              <div class="panel-heading">
-                <div>
-                  <p class="section-kicker">ملاحظات التقرير</p>
-                  <h2>قراءة تنفيذية</h2>
-                </div>
-              </div>
-              <div id="insights" class="insights"></div>
-            </article>
-          </div>
-
-          <div class="detail-grid">
-            <article class="panel focus-panel">
-              <div class="panel-heading">
-                <div>
-                  <p class="section-kicker">أفضل أداء</p>
-                  <h2>منتجات يجب متابعتها</h2>
-                </div>
-              </div>
-              <div id="focusCards" class="focus-cards"></div>
-            </article>
-
-            <article class="panel distribution-panel">
-              <div class="panel-heading">
-                <div>
-                  <p class="section-kicker">توزيع سريع</p>
-                  <h2>شرائح السعر</h2>
-                </div>
-              </div>
-              <div id="priceBands" class="bands"></div>
-            </article>
-          </div>
-
-          <article class="panel table-panel">
-            <div class="panel-heading">
-              <div>
-                <p class="section-kicker">تفاصيل PDF</p>
-                <h2>جدول المنتجات</h2>
-              </div>
-              <input id="searchInput" type="search" placeholder="بحث باسم المنتج أو الباركود" />
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>المنتج</th>
-                    <th>الباركود</th>
-                    <th>الكمية</th>
-                    <th>سعر الوحدة</th>
-                    <th>الإجمالي</th>
-                  </tr>
-                </thead>
-                <tbody id="productsBody">
-                  <tr>
-                    <td colspan="6">سيظهر التحليل هنا بعد قراءة الملف.</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </article>
-        </section>
-
-        <section class="panel preview-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">مطابقة المصدر</p>
-              <h2>معاينة التقرير</h2>
-            </div>
-            <span id="previewLabel">الصفحة الأولى</span>
-          </div>
-          <div id="pdfPreview" class="pdf-preview" aria-label="معاينة الصفحة الأولى من ملف PDF"></div>
-        </section>
-      </section>
-
-      <section id="extractView" class="extract-layout app-view">
-        <article class="panel extract-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">صيغة جاهزة</p>
-              <h2>المستخرج اليومي</h2>
-            </div>
-            <button id="copyExtract" class="copy-button" type="button">نسخ النص</button>
-          </div>
-          <div class="session-upload">
-            <label class="orders-field">
-              <span>عدد الطلبات</span>
-              <input id="ordersInput" type="number" min="0" step="1" placeholder="مثال: 52" />
-            </label>
-            <label class="orders-field">
-              <span>Sales الطلبات</span>
-              <input id="orderSalesInput" type="number" min="0" step="0.01" placeholder="مثال: 7669.19" />
-            </label>
-            <p class="manual-status">أدخل عدد الطلبات وقيمة Sales يدويًا لتحديث ADT وAT وUPT في المستخرج.</p>
-          </div>
-          <pre id="dailyExtract" class="daily-extract">سيظهر المستخرج هنا بعد تحليل ملف PDF.</pre>
-        </article>
-
-        <article class="panel extract-notes">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">تفاصيل الحساب</p>
-              <h2>ما الذي يتم استخراجه؟</h2>
-            </div>
-          </div>
-          <div class="insights">
-            <div class="insight">Sales في المستخرج يأخذ قيمة Sales الطلبات التي تدخلها يدويًا، ويستخدم إجمالي PDF فقط إذا تركتها فارغة.</div>
-            <div class="insight">أدخل عدد الطلبات وSales يدويًا: ADT = عدد الطلبات، و AT = Sales ÷ ADT.</div>
-            <div class="insight">UPT = (إجمالي كمية PDF من صف الإجمالي - كميات on your order 100% و 100.01 per point/order on your order) ÷ ADT.</div>
-            <div class="insight">Cash وJahez غير موجودة في التقرير الحالي، لذلك تظهر N/A إلى أن تتوفر في PDF.</div>
-          </div>
-          <div class="review-block">
-            <p class="section-kicker">مراجعة الحساب</p>
-            <div id="calculationReview" class="calc-review">ستظهر تفاصيل حساب UPT بعد تحميل PDF.</div>
-          </div>
-          <div class="review-block">
-            <p class="section-kicker">جدول العروض</p>
-            <div class="offer-table-wrap">
-              <table class="offer-table">
-                <thead>
-                  <tr>
-                    <th>العرض</th>
-                    <th>الكمية</th>
-                    <th>القيمة</th>
-                  </tr>
-                </thead>
-                <tbody id="offerRowsBody">
-                  <tr>
-                    <td colspan="3">ستظهر عروض on your order هنا.</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </article>
-      </section>
+    <main aria-label="الموقع تحت الصيانة">
+      <img class="logo" src="./assets/match-home-logo.png" alt="Match" />
+      <h1>الموقع تحت الصيانة مؤقتاً</h1>
+      <p>نعمل حالياً على تحديث المستخرج اليومي وتحسين قراءة عروض PDF. سنعود قريباً.</p>
+      <div class="status">صيانة مؤقتة</div>
     </main>
-
-    <script type="module" src="./app.js?v=20260529-7"></script>
   </body>
 </html>
