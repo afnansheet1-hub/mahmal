@@ -145,6 +145,47 @@ function extractBarcode(value) {
   return match ? match[1] || match[2] || match[3] : "";
 }
 
+function textLooksLikeRefundSection(value) {
+  const text = normalizeDigits(value);
+  return (
+    /Refund|Returns?|Refunds?/i.test(text) ||
+    /\u0627\u0644\u0627\u0633\u062a\u0631\u062f\u0627\u062f\u0627\u062a|\u0636\u0631\u0627\u0626\u0628\s+\u0627\u0633\u062a\u0631\u062f\u0627\u062f\s+\u0627\u0644\u0623\u0645\u0648\u0627\u0644|\u0645\u0631\u062a\u062c\u0639|\u0645\u0631\u062a\u062c\u0639\u0627\u062a|\u0627\u0633\u062a\u0631\u062c\u0627\u0639|\u0627\u0633\u062a\u0631\u062f\u0627\u062f/.test(text)
+  );
+}
+
+function getRefundPageIndexes(pageTexts = [], rawPageTexts = []) {
+  const indexes = new Set();
+  const pageCount = Math.max(pageTexts.length, rawPageTexts.length);
+  for (let index = 0; index < pageCount; index += 1) {
+    const text = `${pageTexts[index] || ""}\n${rawPageTexts[index] || ""}`;
+    if (textLooksLikeRefundSection(text)) indexes.add(index);
+  }
+  return indexes;
+}
+
+function textWithoutRefundPages(pageTexts = [], rawPageTexts = [], refundPages = new Set()) {
+  const pageCount = Math.max(pageTexts.length, rawPageTexts.length);
+  const pages = [];
+  for (let index = 0; index < pageCount; index += 1) {
+    const text = `${pageTexts[index] || ""}\n${rawPageTexts[index] || ""}`;
+    if (!refundPages.has(index)) {
+      pages.push(text);
+      continue;
+    }
+
+    const refundIndex = text.search(/\u0627\u0644\u0627\u0633\u062a\u0631\u062f\u0627\u062f\u0627\u062a|\u0636\u0631\u0627\u0626\u0628\s+\u0627\u0633\u062a\u0631\u062f\u0627\u062f\s+\u0627\u0644\u0623\u0645\u0648\u0627\u0644|Refund|Returns?/i);
+    if (refundIndex > 0) pages.push(text.slice(0, refundIndex));
+  }
+  return pages.join("\n");
+}
+
+function rowIsInsideRefundSection(row, pageText = "") {
+  const rowText = row.rawText || "";
+  const rowIndex = rowText ? pageText.indexOf(rowText) : -1;
+  const refundIndex = pageText.search(/\u0627\u0644\u0627\u0633\u062a\u0631\u062f\u0627\u062f\u0627\u062a|\u0636\u0631\u0627\u0626\u0628\s+\u0627\u0633\u062a\u0631\u062f\u0627\u062f\s+\u0627\u0644\u0623\u0645\u0648\u0627\u0644|Refund|Returns?/i);
+  return refundIndex >= 0 && (rowIndex < 0 || rowIndex >= refundIndex);
+}
+
 function groupItemsByLine(items) {
   const lines = [];
   const sorted = items
@@ -234,7 +275,7 @@ function rowFromText(text) {
   return { product, barcode, qty, amount, unitPrice: amount / qty, rawText: normalizedText };
 }
 
-function rowsFromOcrText(text) {
+function rowsFromOcrText(text, pageIndex = null) {
   const lines = normalizeDigits(text)
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -250,6 +291,7 @@ function rowsFromOcrText(text) {
     ];
     const row = candidates.map((candidate) => rowFromText(candidate)).find(Boolean);
     if (row && !seen.has(row.rawText)) {
+      row.pageIndex = pageIndex;
       seen.add(row.rawText);
       rows.push(row);
     }
@@ -328,8 +370,9 @@ async function extractRowsWithOcr(pdf) {
       const page = await pdf.getPage(pageNumber);
       const canvas = await renderPageToCanvas(page, ocrScale);
       const result = await worker.recognize(canvas);
+      const pageIndex = pageTexts.length;
       pageTexts.push(result.data.text);
-      rows.push(...rowsFromOcrText(result.data.text));
+      rows.push(...rowsFromOcrText(result.data.text, pageIndex));
     }
   } finally {
     await worker.terminate();
@@ -343,20 +386,26 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
     throw new Error("No analyzable rows found");
   }
 
-  latestPdfText = pageTexts.join("\n");
+  const refundPages = getRefundPageIndexes(pageTexts, rawPageTexts);
+  const analysisRows = rows.filter((row) => {
+    if (!refundPages.has(row.pageIndex)) return true;
+    const pageText = `${pageTexts[row.pageIndex] || ""}\n${rawPageTexts[row.pageIndex] || ""}`;
+    return !rowIsInsideRefundSection(row, pageText);
+  });
+  latestPdfText = textWithoutRefundPages(pageTexts, rawPageTexts, refundPages);
   offerReviewRows = mergeOfferRows(
-    rows.filter((row) => isCountableOfferDiscount(row)),
+    analysisRows.filter((row) => isCountableOfferDiscount(row)),
     extractOfferRowsFromPdfText(latestPdfText),
-    extractOfferRowsFromPdfText(rawPageTexts.join("\n")),
+    extractOfferRowsFromPdfText(textWithoutRefundPages([], rawPageTexts, refundPages)),
   );
   offerDiscountQuantityTotal = offerReviewRows.reduce((sum, row) => sum + row.qty, 0);
-  pdfGrandQuantityTotal = extractPdfGrandQuantityTotal(rows);
-  allExtractProducts = mergeContinuationRows(rows);
+  pdfGrandQuantityTotal = extractPdfGrandQuantityTotal(analysisRows);
+  allExtractProducts = mergeContinuationRows(analysisRows);
   allProducts = allExtractProducts.filter((row) => row.amount > 0);
   aiPdfTotalQty = null;
   aiOfferDiscountQty = null;
   discountBundleCounts = mergeDiscountBundleCounts(
-    extractDiscountBundleCounts(rawPageTexts.join("\n")),
+    extractDiscountBundleCounts(textWithoutRefundPages([], rawPageTexts, refundPages)),
     extractDiscountBundleCountsFromRows(offerReviewRows),
   );
   mappedDailyQuantities = extractMappedDailyQuantities(latestPdfText);
@@ -395,9 +444,10 @@ async function analyzePdf(source, name, options = {}) {
       rawPageTexts.push(content.items.map((item) => item.str).join("\n"));
       const lines = groupItemsByLine(content.items);
       pageTexts.push(lines.map((line) => line.text).join("\n"));
+      const pageIndex = pageTexts.length - 1;
       for (const line of lines) {
         const row = rowFromLine(line);
-        if (row) rows.push(row);
+        if (row) rows.push({ ...row, pageIndex });
       }
     }
 
