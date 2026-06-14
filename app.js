@@ -85,6 +85,18 @@ const OFFER_DISCOUNT_MAP = [
     unitDiscount: 100.01,
     bundleKey: "mmt",
   },
+  {
+    offerName: "Vintage Bundle",
+    discountCode: "B1G1 Vintage",
+    unitDiscount: 169.57,
+    bundleKey: "vintage",
+  },
+  {
+    offerName: "Vibes Bundle",
+    discountCode: "on your order 100%",
+    unitDiscount: 130.44,
+    bundleKey: "vibes",
+  },
 ];
 
 let allProducts = [];
@@ -102,6 +114,12 @@ let discountBundleCounts = {
   discoveryWinter: null,
   magicD5: null,
   mmt: null,
+  vintage: null,
+  vibes: null,
+};
+let dailyBundleCounts = {
+  vintage: 0,
+  vibes: 0,
 };
 let offerReviewRows = [];
 let discountReviewRows = [];
@@ -166,6 +184,10 @@ function resetEmptyState() {
   discountReviewRows = [];
   offersSummary = [];
   dailyOffers.length = 0;
+  dailyBundleCounts = {
+    vintage: 0,
+    vibes: 0,
+  };
   offerDiscountQuantityTotal = 0;
   pdfGrandQuantityTotal = null;
   document.body.classList.remove("has-report");
@@ -454,8 +476,9 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
       if (row.bundleKey) counts[row.bundleKey] = (counts[row.bundleKey] || 0) + row.repeatCount;
       return counts;
     },
-    { pinkMusk: 0, discoveryWinter: 0, magicD5: 0, mmt: 0 },
+    { pinkMusk: 0, discoveryWinter: 0, magicD5: 0, mmt: 0, vintage: 0, vibes: 0 },
   );
+  dailyBundleCounts = extractDailyBundleCounts(rawText);
   mappedDailyQuantities = extractMappedDailyQuantities(latestPdfText);
   renderDashboard(pdf.numPages, allProducts, latestPdfText, name);
   hasReport = true;
@@ -623,6 +646,9 @@ function pageTextForRow(row, pageTexts = [], rawPageTexts = []) {
 
 function discountCodeFromProduct(product) {
   const name = normalizeName(product);
+  if (name.includes("b1g1 vintage")) {
+    return "B1G1 Vintage";
+  }
   if (name.includes("per point on your order") || name.includes("order your on point per")) {
     return "100.01 per point on your order";
   }
@@ -761,6 +787,60 @@ function addDailyOfferTotal(totals, name, qty, value) {
   entry.qty += qty || 0;
   entry.value += value || 0;
   totals.set(key, entry);
+}
+
+function extractDailyBundleCounts(rawText) {
+  const counts = {
+    vintage: 0,
+    vibes: 0,
+  };
+  const pages = String(rawText || "").split(/\f+/);
+
+  for (const page of pages) {
+    const pageText = normalizeDigits(salesTextOnly(page)).replace(/\u200b/g, " ");
+    if (!pageText.trim()) continue;
+
+    const lines = pageText
+      .split(/\r?\n/)
+      .map((line) => line.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+      const line = lines[lineIndex];
+      const offerName = offerNameFromLine(line);
+      if (!offerName) continue;
+
+      const candidates = [
+        line,
+        `${line} ${lines[lineIndex + 1] || ""}`.trim(),
+        `${lines[lineIndex - 1] || ""} ${line}`.trim(),
+        `${lines[lineIndex - 1] || ""} ${line} ${lines[lineIndex + 1] || ""}`.trim(),
+      ].filter(Boolean);
+
+      for (const candidate of candidates) {
+        if (isReturnText(candidate) || isReturnPageText(candidate)) continue;
+        const amount = extractNegativeOfferAmount(candidate);
+        if (amount === null) continue;
+        const qty = extractOfferQtyFromText(candidate, amount);
+        if (qty === null) continue;
+
+        const unitDiscount = Math.abs(amount) / qty;
+        if (normalizeName(offerName).includes("b1g1 vintage")) {
+          counts.vintage += qty;
+          break;
+        }
+        if (/on\s+your\s+order\s+100\s*%/i.test(offerName) && Math.abs(unitDiscount - 130.44) <= 0.35) {
+          counts.vibes += qty;
+          break;
+        }
+      }
+    }
+  }
+
+  return {
+    vintage: Number(counts.vintage.toFixed(2)),
+    vibes: Number(counts.vibes.toFixed(2)),
+  };
 }
 
 function addOfferSummaryLine(summary, seen, pageIndex, line, keySuffix = "") {
@@ -1011,7 +1091,7 @@ function isOfferDiscount(row) {
 
 function isOrderDiscountName(product) {
   const name = normalizeName(product);
-  return name.includes("on your order") || name.includes("order your on");
+  return name.includes("on your order") || name.includes("order your on") || name.includes("b1g1 vintage");
 }
 
 function isOrder100DiscountName(product) {
@@ -1219,6 +1299,8 @@ function renderDailyExtract({ products, countProducts, totalSales, totalQty, dat
   const magicD5Bundle = discountBundleCounts.magicD5 ?? 0;
   const tawziat = sumQtyByMappedProduct(countProducts, "tawziatCollection");
   const mmtBundle = discountBundleCounts.mmt ?? 0;
+  const vintageBundle = dailyBundleCounts.vintage || discountBundleCounts.vintage || 0;
+  const vibesBundle = dailyBundleCounts.vibes || discountBundleCounts.vibes || 0;
   const makeupSales = sumAmountByBarcodes(countProducts, makeupBarcodes);
   const tawziyatBoxSolo = sumQtyByMappedProduct(countProducts, "tawziyatBoxSolo");
   const d1Box = sumQtyByMappedProduct(countProducts, "d1Box");
@@ -1250,8 +1332,8 @@ Musk+Mag+Taw Bundle:${formatPlainNumber(mmtBundle)}
 Pink+Musk Bundle:${formatPlainNumber(pinkMuskBundle)}
 W+D4+Angel Bundle:${formatPlainNumber(discoveryWinterBundle)}
 Magic+D5 Bundle:${formatPlainNumber(magicD5Bundle)}
-Vintage Bundle:0
-Vibes Bundle:0
+Vintage Bundle:${formatPlainNumber(vintageBundle)}
+Vibes Bundle:${formatPlainNumber(vibesBundle)}
 ------------------—
 ———————————
 *MAKEUP: ${makeupSales ? formatPlainMoney(makeupSales) : "0"}
