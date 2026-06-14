@@ -1012,6 +1012,10 @@ function sumQtyByKeywords(products, keywords) {
 }
 
 const dailyProductMap = {
+  d1Box: {
+    barcodes: ["6287020283673"],
+    names: [],
+  },
   discoveryBlack: {
     barcodes: ["6287020284793"],
     names: ["match collection match discovery set d4"],
@@ -1059,13 +1063,17 @@ const makeupBarcodes = [
 ];
 
 function productMatches(row, rule) {
-  if (rule.barcodes.includes(row.barcode)) return true;
+  if (!rule) return false;
+  const barcodes = rule.barcodes || [];
+  const names = rule.names || [];
+  if (barcodes.includes(row.barcode)) return true;
   const name = normalizeName(row.product);
-  return rule.names.some((target) => name.includes(normalizeName(target)));
+  return names.some((target) => name.includes(normalizeName(target)));
 }
 
 function sumQtyByMappedProduct(products, key) {
   const rule = dailyProductMap[key];
+  if (!rule) return 0;
   return products
     .filter((row) => productMatches(row, rule))
     .reduce((sum, row) => sum + row.qty, 0);
