@@ -1,6 +1,10 @@
-import * as pdfjsLib from "./vendor/pdf.min.mjs";
+const pdfjsLib = window.pdfjsLib;
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = "./vendor/pdf.worker.min.mjs";
+if (!pdfjsLib) {
+  throw new Error("PDF reader failed to load");
+}
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = "./vendor/pdf.legacy.worker.min.js";
 
 const defaultPdfName = "تفاصيل المبيعات (3).pdf";
 const els = {
