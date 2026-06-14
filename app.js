@@ -664,14 +664,22 @@ function discountCodeFromProduct(product) {
 function findOfferDiscountMatch(discountCode, totalDiscount) {
   const matches = OFFER_DISCOUNT_MAP.filter((offer) => normalizeName(offer.discountCode) === normalizeName(discountCode));
   for (const offer of matches) {
-    const repeatCount = Math.round(totalDiscount / offer.unitDiscount);
-    if (repeatCount < 1) continue;
-    const expected = repeatCount * offer.unitDiscount;
-    if (Math.abs(totalDiscount - expected) <= Math.max(0.03, repeatCount * 0.02)) {
+    const repeatCount = repeatCountFromDiscount(totalDiscount, offer.unitDiscount);
+    if (repeatCount) {
       return { offer, repeatCount };
     }
   }
   return null;
+}
+
+function repeatCountFromDiscount(totalDiscount, unitDiscount) {
+  const discount = Math.abs(Number(totalDiscount) || 0);
+  const unit = Math.abs(Number(unitDiscount) || 0);
+  if (!discount || !unit) return 0;
+  const repeatCount = Math.round(discount / unit);
+  if (repeatCount < 1) return 0;
+  const expected = repeatCount * unit;
+  return Math.abs(discount - expected) <= Math.max(0.05, repeatCount * 0.05) ? repeatCount : 0;
 }
 
 function isDiscountRowForSummary(row, pageTexts = [], rawPageTexts = []) {
@@ -824,13 +832,13 @@ function extractDailyBundleCounts(rawText) {
         const qty = extractOfferQtyFromText(candidate, amount);
         if (qty === null) continue;
 
-        const unitDiscount = Math.abs(amount) / qty;
         if (normalizeName(offerName).includes("b1g1 vintage")) {
-          counts.vintage += qty;
+          counts.vintage += repeatCountFromDiscount(amount, 169.57) || qty;
           break;
         }
-        if (/on\s+your\s+order\s+100\s*%/i.test(offerName) && Math.abs(unitDiscount - 130.44) <= 0.35) {
-          counts.vibes += qty;
+        const vibesRepeatCount = repeatCountFromDiscount(amount, 130.44);
+        if (/on\s+your\s+order\s+100\s*%/i.test(offerName) && vibesRepeatCount) {
+          counts.vibes += vibesRepeatCount;
           break;
         }
       }
