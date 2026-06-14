@@ -392,12 +392,17 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
     const pageText = `${pageTexts[row.pageIndex] || ""}\n${rawPageTexts[row.pageIndex] || ""}`;
     return !rowIsInsideRefundSection(row, pageText);
   });
+  const refundRows = rows.filter((row) => {
+    if (!refundPages.has(row.pageIndex)) return false;
+    const pageText = `${pageTexts[row.pageIndex] || ""}\n${rawPageTexts[row.pageIndex] || ""}`;
+    return rowIsInsideRefundSection(row, pageText);
+  });
   latestPdfText = textWithoutRefundPages(pageTexts, rawPageTexts, refundPages);
-  offerReviewRows = mergeOfferRows(
+  offerReviewRows = subtractRefundedOfferRows(mergeOfferRows(
     analysisRows.filter((row) => isCountableOfferDiscount(row)),
     extractOfferRowsFromPdfText(latestPdfText),
     extractOfferRowsFromPdfText(textWithoutRefundPages([], rawPageTexts, refundPages)),
-  );
+  ), refundRows);
   offerDiscountQuantityTotal = offerReviewRows.reduce((sum, row) => sum + row.qty, 0);
   pdfGrandQuantityTotal = extractPdfGrandQuantityTotal(analysisRows);
   allExtractProducts = mergeContinuationRows(analysisRows);
@@ -570,6 +575,10 @@ function isCountableOfferDiscount(row) {
   return isReviewedOffer(row) && row.qty > 0 && row.amount < 0;
 }
 
+function isRefundOfferDiscount(row) {
+  return isReviewedOffer(row) && row.qty > 0 && row.amount > 0;
+}
+
 const order100DiscountUnitPrices = [21.74, 46.09, 67.83, 100, 100.01];
 
 function countOrder100DiscountUnits(row) {
@@ -652,6 +661,36 @@ function extractOfferRowsFromPdfText(text) {
   }
 
   return rows;
+}
+
+function offerMatchKey(row) {
+  return `${normalizeName(getOfferLabel(row))}|${Math.abs(row.amount).toFixed(2)}`;
+}
+
+function subtractRefundedOfferRows(saleRows, refundRows) {
+  const refundUnitsByKey = new Map();
+  for (const row of refundRows) {
+    if (!isRefundOfferDiscount(row)) continue;
+    const key = offerMatchKey(row);
+    refundUnitsByKey.set(key, (refundUnitsByKey.get(key) || 0) + row.qty);
+  }
+
+  return saleRows
+    .map((row) => {
+      const key = offerMatchKey(row);
+      const refundQty = refundUnitsByKey.get(key) || 0;
+      if (!refundQty) return row;
+      const remainingQty = Math.max(0, row.qty - refundQty);
+      refundUnitsByKey.set(key, Math.max(0, refundQty - row.qty));
+      if (!remainingQty) return null;
+      return {
+        ...row,
+        qty: remainingQty,
+        amount: (row.amount / row.qty) * remainingQty,
+        unitPrice: row.amount / row.qty,
+      };
+    })
+    .filter(Boolean);
 }
 
 function mergeOfferRows(...groups) {
