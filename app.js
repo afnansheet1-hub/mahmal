@@ -419,8 +419,9 @@ async function extractRowsWithOcr(pdf) {
       const page = await pdf.getPage(pageNumber);
       const canvas = await renderPageToCanvas(page, ocrScale);
       const result = await worker.recognize(canvas);
-      pageTexts.push(result.data.text);
-      rows.push(...rowsFromOcrText(result.data.text, pageNumber - 1));
+      const salesText = salesTextOnly(result.data.text);
+      pageTexts.push(salesText);
+      rows.push(...rowsFromOcrText(salesText, pageNumber - 1));
     }
   } finally {
     await worker.terminate();
@@ -488,10 +489,16 @@ async function analyzePdf(source, name, options = {}) {
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber);
       const content = await page.getTextContent();
-      rawPageTexts.push(content.items.map((item) => item.str).join("\n"));
+      rawPageTexts.push(salesTextOnly(content.items.map((item) => item.str).join("\n")));
       const lines = groupItemsByLine(content.items);
-      pageTexts.push(lines.map((line) => line.text).join(" "));
+      pageTexts.push(salesTextOnly(lines.map((line) => line.text).join(" ")));
+      let insideRefundSection = false;
       for (const line of lines) {
+        if (refundSectionStartIndex(line.text) >= 0) {
+          insideRefundSection = true;
+          continue;
+        }
+        if (insideRefundSection) continue;
         const row = rowFromLine(line);
         if (row) rows.push({ ...row, pageIndex: pageNumber - 1 });
       }
@@ -580,6 +587,18 @@ function isReturnText(value) {
 function isReturnPageText(value) {
   const text = normalizeDigits(value);
   return /\u0645\u0631\u062a\u062c\u0639|\u0645\u0631\u062a\u062c\u0639\u0627\u062a|\u0627\u0633\u062a\u0631\u062c\u0627\u0639|\u0627\u0633\u062a\u0631\u062f\u0627\u062f|\u0627\u0644\u0627\u0633\u062a\u0631\u062f\u0627\u062f\u0627\u062a/.test(text);
+}
+
+function refundSectionStartIndex(value) {
+  return normalizeDigits(value).search(
+    /\u0627\u0644\u0627\u0633\u062a\u0631\u062f\u0627\u062f\u0627\u062a|\u0636\u0631\u0627\u0626\u0628\s+\u0627\u0633\u062a\u0631\u062f\u0627\u062f\s+\u0627\u0644\u0623\u0645\u0648\u0627\u0644|\breturns?\b|\brefunds?\b/i,
+  );
+}
+
+function salesTextOnly(value) {
+  const text = String(value || "");
+  const refundIndex = refundSectionStartIndex(text);
+  return refundIndex >= 0 ? text.slice(0, refundIndex) : text;
 }
 
 function extractInvoiceNumber(text, fallback = "N/A") {
@@ -722,6 +741,28 @@ function closestOfferQty(text, anchorIndex, amount) {
   return matches[0]?.value ?? null;
 }
 
+function offerNameFromLine(line) {
+  if (/100\.01\s+per\s+(?:point|order)\s+on\s+your\s+order/i.test(line)) return "100.01 per point on your order";
+  if (/on\s+your\s+order\s+100\s*%/i.test(line)) return "on your order 100%";
+  const b1g1Match = normalizeDigits(line).match(/\bB1G1\b[^\d\n\r]*/i);
+  if (b1g1Match) return b1g1Match[0].replace(/\s+/g, " ").trim();
+  return "";
+}
+
+function addDailyOfferTotal(totals, name, qty, value) {
+  const key = normalizeName(name || "offer");
+  const entry =
+    totals.get(key) ||
+    {
+      name,
+      qty: 0,
+      value: 0,
+    };
+  entry.qty += qty || 0;
+  entry.value += value || 0;
+  totals.set(key, entry);
+}
+
 function addOfferSummaryLine(summary, seen, pageIndex, line, keySuffix = "") {
   if (!/on\s+your\s+order\s+100\s*%/i.test(line)) return false;
   if (isReturnText(line) || isReturnPageText(line)) return false;
@@ -747,8 +788,8 @@ function extractPdfOfferRowsSummaryFromText(pageTexts = [], rawPageTexts = []) {
   const pageCount = Math.max(pageTexts.length, rawPageTexts.length);
 
   for (let index = 0; index < pageCount; index += 1) {
-    const pageText = `${rawPageTexts[index] || ""}\n${pageTexts[index] || ""}`;
-    if (isReturnText(pageText) || isReturnPageText(pageText)) continue;
+    const pageText = salesTextOnly(`${rawPageTexts[index] || ""}\n${pageTexts[index] || ""}`);
+    if (!pageText.trim()) continue;
 
     const normalized = normalizeDigits(pageText).replace(/\u200b/g, " ");
     let matchedLine = false;
@@ -806,12 +847,11 @@ function extractOnYourOrderOffers(rawText) {
   const pages = String(rawText || "").split(/\f+/);
   const matches = [];
   const seenAnchors = new Set();
-  let totalOfferQty = 0;
-  let totalOfferValue = 0;
+  const totals = new Map();
 
   for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
-    const pageText = normalizeDigits(pages[pageIndex] || "").replace(/\u200b/g, " ");
-    if (!pageText.trim() || isReturnText(pageText) || isReturnPageText(pageText)) continue;
+    const pageText = normalizeDigits(salesTextOnly(pages[pageIndex] || "")).replace(/\u200b/g, " ");
+    if (!pageText.trim()) continue;
 
     const lines = pageText
       .split(/\r?\n/)
@@ -820,7 +860,8 @@ function extractOnYourOrderOffers(rawText) {
 
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
       const line = lines[lineIndex];
-      if (!/on\s+your\s+order\s+100\s*%/i.test(line)) continue;
+      const offerName = offerNameFromLine(line);
+      if (!offerName) continue;
       if (isReturnText(line) || isReturnPageText(line)) continue;
 
       const candidates = [
@@ -839,26 +880,25 @@ function extractOnYourOrderOffers(rawText) {
         if (amount === null) continue;
         const qty = extractOfferQtyFromText(candidate, amount);
         if (qty === null) continue;
-        parsed = { qty, value: amount, text: candidate };
+        parsed = { qty, value: amount, text: candidate, name: offerNameFromLine(candidate) || offerName };
         break;
       }
 
       if (!parsed) continue;
-      const key = `${pageIndex}|${lineIndex}|${parsed.qty}|${parsed.value.toFixed(2)}`;
+      const key = `${pageIndex}|${lineIndex}|${parsed.name}|${parsed.qty}|${parsed.value.toFixed(2)}`;
       if (seenAnchors.has(key)) continue;
       seenAnchors.add(key);
       matches.push({
-        name: "on your order 100%",
+        name: parsed.name,
         qty: parsed.qty,
         value: parsed.value,
         page: pageIndex + 1,
         text: parsed.text,
       });
-      totalOfferQty += parsed.qty;
-      totalOfferValue += parsed.value;
+      addDailyOfferTotal(totals, parsed.name, parsed.qty, parsed.value);
     }
 
-    const pattern = /on\s+your\s+order\s+100\s*%/gi;
+    const pattern = /on\s+your\s+order\s+100\s*%|B1G1[^\n\r]*/gi;
     let match;
     while ((match = pattern.exec(pageText)) !== null) {
       const anchorKey = `${pageIndex}|raw|${match.index}`;
@@ -879,27 +919,24 @@ function extractOnYourOrderOffers(rawText) {
       );
       if (duplicate) continue;
 
+      const name = offerNameFromLine(segment) || offerNameFromLine(match[0]) || "on your order 100%";
       seenAnchors.add(anchorKey);
       matches.push({
-        name: "on your order 100%",
+        name,
         qty,
         value: amount,
         page: pageIndex + 1,
         text: segment,
       });
-      totalOfferQty += qty;
-      totalOfferValue += amount;
+      addDailyOfferTotal(totals, name, qty, amount);
     }
   }
 
-  const result = [];
-  if (totalOfferQty > 0) {
-    result.push({
-      name: "on your order 100%",
-      qty: Number(totalOfferQty.toFixed(2)),
-      value: Number(totalOfferValue.toFixed(2)),
-    });
-  }
+  const result = Array.from(totals.values()).map((entry) => ({
+    name: entry.name,
+    qty: Number(entry.qty.toFixed(2)),
+    value: Number(entry.value.toFixed(2)),
+  }));
 
   console.log("RAW PDF TEXT:", rawText);
   console.log("ON YOUR ORDER MATCHES:", matches);
