@@ -463,7 +463,8 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
   offerReviewRows = offerSummaries.offers;
   discountReviewRows = offerSummaries.unmatchedDiscounts;
   dailyOffers.length = 0;
-  dailyOffers.push(...extractOnYourOrderOffers(rawText));
+  const rowDailyOffers = extractDailyOffersFromRows(rows, pageTexts, rawPageTexts);
+  dailyOffers.push(...(rowDailyOffers.length ? rowDailyOffers : extractOnYourOrderOffers(rawText)));
   offersSummary = dailyOffers;
   offerDiscountQuantityTotal = dailyOffers.reduce((sum, offer) => sum + offer.qty, 0);
   pdfGrandQuantityTotal = extractPdfGrandQuantityTotal(rows);
@@ -478,7 +479,12 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
     },
     { pinkMusk: 0, discoveryWinter: 0, magicD5: 0, mmt: 0, vintage: 0, vibes: 0 },
   );
-  dailyBundleCounts = extractDailyBundleCounts(rawText);
+  const rowBundleCounts = extractDailyBundleCountsFromRows(rows, pageTexts, rawPageTexts);
+  const textBundleCounts = extractDailyBundleCounts(rawText);
+  dailyBundleCounts = {
+    vintage: rowBundleCounts.vintage || textBundleCounts.vintage || 0,
+    vibes: rowBundleCounts.vibes || textBundleCounts.vibes || 0,
+  };
   mappedDailyQuantities = extractMappedDailyQuantities(latestPdfText);
   renderDashboard(pdf.numPages, allProducts, latestPdfText, name);
   hasReport = true;
@@ -646,7 +652,7 @@ function pageTextForRow(row, pageTexts = [], rawPageTexts = []) {
 
 function discountCodeFromProduct(product) {
   const name = normalizeName(product);
-  if (name.includes("b1g1 vintage")) {
+  if (name.includes("b1g1 vintage") || name.includes("bg vintage")) {
     return "B1G1 Vintage";
   }
   if (name.includes("per point on your order") || name.includes("order your on point per")) {
@@ -663,13 +669,20 @@ function discountCodeFromProduct(product) {
 
 function findOfferDiscountMatch(discountCode, totalDiscount) {
   const matches = OFFER_DISCOUNT_MAP.filter((offer) => normalizeName(offer.discountCode) === normalizeName(discountCode));
+  const candidates = [];
   for (const offer of matches) {
     const repeatCount = repeatCountFromDiscount(totalDiscount, offer.unitDiscount);
     if (repeatCount) {
-      return { offer, repeatCount };
+      const expected = repeatCount * Math.abs(offer.unitDiscount);
+      candidates.push({
+        offer,
+        repeatCount,
+        difference: Math.abs(Math.abs(totalDiscount) - expected),
+      });
     }
   }
-  return null;
+  candidates.sort((a, b) => a.difference - b.difference || a.repeatCount - b.repeatCount);
+  return candidates[0] || null;
 }
 
 function repeatCountFromDiscount(totalDiscount, unitDiscount) {
@@ -797,6 +810,60 @@ function addDailyOfferTotal(totals, name, qty, value) {
   totals.set(key, entry);
 }
 
+function offerQtyFromAmount(name, amount, fallbackQty) {
+  const normalized = normalizeName(name);
+  if (normalized.includes("b1g1 vintage")) {
+    return repeatCountFromDiscount(amount, 169.57) || fallbackQty || 0;
+  }
+  if (normalized.includes("on your order") || normalized.includes("order your on")) {
+    const match = findOfferDiscountMatch("on your order 100%", Math.abs(amount));
+    return match?.repeatCount || fallbackQty || 0;
+  }
+  if (normalized.includes("100 01 per point") || normalized.includes("100 01 per order")) {
+    return repeatCountFromDiscount(amount, 100.01) || fallbackQty || 0;
+  }
+  return fallbackQty || 0;
+}
+
+function extractDailyOffersFromRows(rows, pageTexts = [], rawPageTexts = []) {
+  const totals = new Map();
+  const seen = new Set();
+
+  for (const row of rows) {
+    const sourceText = `${row.rawText || ""} ${row.product || ""} ${pageTextForRow(row, pageTexts, rawPageTexts)}`;
+    if (row.amount >= 0 || isReturnText(sourceText) || isReturnPageText(sourceText)) continue;
+
+    const name = discountCodeFromProduct(sourceText);
+    if (!name) continue;
+
+    const key = `${row.pageIndex ?? ""}|${name}|${Number(row.amount).toFixed(2)}|${Number(row.qty || 0).toFixed(2)}|${row.rawText || ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    addDailyOfferTotal(totals, name, offerQtyFromAmount(name, row.amount, row.qty), row.amount);
+  }
+
+  return Array.from(totals.values()).map((entry) => ({
+    name: entry.name,
+    qty: Number(entry.qty.toFixed(2)),
+    value: Number(entry.value.toFixed(2)),
+  }));
+}
+
+function mergeDailyOffers(...offerGroups) {
+  const totals = new Map();
+  for (const group of offerGroups) {
+    for (const offer of group || []) {
+      addDailyOfferTotal(totals, offer.name, offer.qty, offer.value);
+    }
+  }
+  return Array.from(totals.values()).map((entry) => ({
+    name: entry.name,
+    qty: Number(entry.qty.toFixed(2)),
+    value: Number(entry.value.toFixed(2)),
+  }));
+}
+
 function extractDailyBundleCounts(rawText) {
   const counts = {
     vintage: 0,
@@ -842,6 +909,31 @@ function extractDailyBundleCounts(rawText) {
           break;
         }
       }
+    }
+  }
+
+  return {
+    vintage: Number(counts.vintage.toFixed(2)),
+    vibes: Number(counts.vibes.toFixed(2)),
+  };
+}
+
+function extractDailyBundleCountsFromRows(rows, pageTexts = [], rawPageTexts = []) {
+  const counts = {
+    vintage: 0,
+    vibes: 0,
+  };
+
+  for (const row of rows) {
+    const sourceText = `${row.rawText || ""} ${row.product || ""} ${pageTextForRow(row, pageTexts, rawPageTexts)}`;
+    if (row.amount >= 0 || isReturnText(sourceText) || isReturnPageText(sourceText)) continue;
+
+    const discountCode = discountCodeFromProduct(sourceText);
+    if (discountCode === "B1G1 Vintage") {
+      counts.vintage += repeatCountFromDiscount(row.amount, 169.57) || row.qty || 0;
+    }
+    if (discountCode === "on your order 100%") {
+      counts.vibes += repeatCountFromDiscount(row.amount, 130.44);
     }
   }
 
@@ -1099,7 +1191,7 @@ function isOfferDiscount(row) {
 
 function isOrderDiscountName(product) {
   const name = normalizeName(product);
-  return name.includes("on your order") || name.includes("order your on") || name.includes("b1g1 vintage");
+  return name.includes("on your order") || name.includes("order your on") || name.includes("b1g1 vintage") || name.includes("bg vintage");
 }
 
 function isOrder100DiscountName(product) {
@@ -1461,6 +1553,42 @@ function renderOfferSummaryRows() {
     `;
     els.discountRowsBody.appendChild(tr);
   }
+}
+
+function renderOfferSummaryRows() {
+  const headers = els.offerRowsBody?.closest("table")?.querySelectorAll("thead th");
+  ["العرض", "الكمية", "القيمة"].forEach((label, index) => {
+    if (headers?.[index]) headers[index].textContent = label;
+  });
+
+  els.offerRowsBody.innerHTML = "";
+  if (els.discountRowsBody) {
+    els.discountRowsBody.innerHTML = "<tr><td colspan='3'></td></tr>";
+  }
+
+  if (!dailyOffers.length) {
+    els.offerRowsBody.innerHTML = "<tr><td colspan='3'>لا توجد عروض مطابقة داخل PDF</td></tr>";
+    return;
+  }
+
+  for (const row of dailyOffers) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(row.name)}</td>
+      <td>${formatPlainNumber(row.qty)}</td>
+      <td>${moneyFormatter.format(row.value)} ر.س</td>
+    `;
+    els.offerRowsBody.appendChild(tr);
+  }
+
+  const total = document.createElement("tr");
+  total.className = "offer-total-row";
+  total.innerHTML = `
+    <td>الإجمالي</td>
+    <td>${formatPlainNumber(dailyOffers.reduce((sum, row) => sum + row.qty, 0))}</td>
+    <td>${moneyFormatter.format(dailyOffers.reduce((sum, row) => sum + row.value, 0))} ر.س</td>
+  `;
+  els.offerRowsBody.appendChild(total);
 }
 
 function updateOrders(value) {
