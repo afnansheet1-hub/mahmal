@@ -808,6 +808,7 @@ function offerNameFromText(value) {
   if (/on\s+your\s+order\s+100\s*%/i.test(text)) return "on your order 100%";
   const b1g1Match = text.match(/\bB\s*1\s*G\s*1\s+Vintage\b/i);
   if (b1g1Match) return "B1G1 Vintage";
+  if (/\bBG\s+Vintage\b/i.test(text)) return "B1G1 Vintage";
   return "";
 }
 
@@ -1438,7 +1439,7 @@ JAHEZ ADT : N/A
 
   els.dailyExtract.textContent = currentExtractText;
   renderCalculationReview({ pdfQuantityTotal, offerQty: offerDiscountQuantityTotal, adt, at, uptBaseQty, upt });
-  renderDetailedOfferSummaryRows();
+  renderPdfOfferRows();
 }
 
 function renderCalculationReview({ pdfQuantityTotal, offerQty, adt, at, uptBaseQty, upt }) {
@@ -1582,6 +1583,43 @@ function renderDetailedOfferSummaryRows() {
     <td>الإجمالي</td>
     <td>${formatPlainNumber(rowsToRender.reduce((sum, row) => sum + row.qty, 0))}</td>
     <td>${moneyFormatter.format(rowsToRender.reduce((sum, row) => sum + row.value, 0))} ر.س</td>
+  `;
+  els.offerRowsBody.appendChild(total);
+}
+
+function renderPdfOfferRows() {
+  const headers = els.offerRowsBody?.closest("table")?.querySelectorAll("thead th");
+  ["\u0627\u0644\u0639\u0631\u0636", "\u0627\u0644\u0643\u0645\u064a\u0629", "\u0627\u0644\u0642\u064a\u0645\u0629"].forEach((label, index) => {
+    if (headers?.[index]) headers[index].textContent = label;
+  });
+
+  els.offerRowsBody.innerHTML = "";
+  if (els.discountRowsBody) {
+    els.discountRowsBody.innerHTML = "<tr><td colspan='3'></td></tr>";
+  }
+
+  if (!dailyOfferRows.length) {
+    els.offerRowsBody.innerHTML =
+      "<tr><td colspan='3'>\u0644\u0627 \u062a\u0648\u062c\u062f \u0639\u0631\u0648\u0636 \u062a\u0641\u0635\u064a\u0644\u064a\u0629 \u0645\u0637\u0627\u0628\u0642\u0629 \u062f\u0627\u062e\u0644 PDF</td></tr>";
+    return;
+  }
+
+  for (const row of dailyOfferRows) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(row.name)}</td>
+      <td>${formatPlainNumber(row.qty)}</td>
+      <td>${moneyFormatter.format(row.value)} \u0631.\u0633</td>
+    `;
+    els.offerRowsBody.appendChild(tr);
+  }
+
+  const total = document.createElement("tr");
+  total.className = "offer-total-row";
+  total.innerHTML = `
+    <td>\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a</td>
+    <td>${formatPlainNumber(dailyOfferRows.reduce((sum, row) => sum + row.qty, 0))}</td>
+    <td>${moneyFormatter.format(dailyOfferRows.reduce((sum, row) => sum + row.value, 0))} \u0631.\u0633</td>
   `;
   els.offerRowsBody.appendChild(total);
 }
