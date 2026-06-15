@@ -468,7 +468,7 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
   dailyOffers.push(...extractOnYourOrderOffers(rawText));
   dailyOfferRows.length = 0;
   const detailedRows = extractDetailedOfferRowsFromRows(rows);
-  dailyOfferRows.push(...(detailedRows.length ? detailedRows : extractDetailedOfferRowsFromText(rawText)));
+  dailyOfferRows.push(...mergeDetailedOfferRows(detailedRows, extractDetailedOfferRowsFromText(rawText)));
   offersSummary = dailyOffers;
   offerDiscountQuantityTotal = dailyOffers.reduce((sum, offer) => sum + offer.qty, 0);
   pdfGrandQuantityTotal = extractPdfGrandQuantityTotal(rows);
@@ -808,6 +808,7 @@ function offerNameFromText(value) {
   if (/on\s+your\s+order\s+100\s*%/i.test(text)) return "on your order 100%";
   const b1g1Match = text.match(/\bB\s*1\s*G\s*1\s+Vintage\b/i);
   if (b1g1Match) return "B1G1 Vintage";
+  if (/\bBG\s+Vintage\b/i.test(text)) return "B1G1 Vintage";
   return "";
 }
 
@@ -828,6 +829,7 @@ function extractDetailedOfferRowsFromRows(rows) {
       name,
       qty: Number((row.qty || 0).toFixed(2)),
       value: Number((row.amount || 0).toFixed(2)),
+      page: Number(row.pageIndex ?? 0) + 1,
     });
   }
 
@@ -874,9 +876,54 @@ function extractDetailedOfferRowsFromText(rawText) {
           name,
           qty: Number(qty.toFixed(2)),
           value: Number(amount.toFixed(2)),
+          page: pageIndex + 1,
         });
         break;
       }
+    }
+
+    const offerPattern = /100\.01\s+per\s+(?:point|order)\s+on\s+your\s+order|on\s+your\s+order\s+100\s*%|\bB\s*1\s*G\s*1\s+Vintage\b|\bBG\s+Vintage\b/gi;
+    let match;
+    while ((match = offerPattern.exec(pageText)) !== null) {
+      const name = offerNameFromText(match[0]);
+      if (!name) continue;
+      const start = Math.max(0, match.index - 260);
+      const end = Math.min(pageText.length, match.index + match[0].length + 260);
+      const segment = pageText.slice(start, end).replace(/\s+/g, " ").trim();
+      if (isReturnText(segment) || isReturnPageText(segment)) continue;
+
+      const amount = closestNegativeOfferAmount(segment, match.index - start);
+      if (amount === null) continue;
+      const qty = closestOfferQty(segment, match.index - start, amount);
+      if (qty === null) continue;
+
+      const duplicate = result.some(
+        (row) => row.page === pageIndex + 1 && row.name === name && Math.abs(row.qty - qty) < 0.001 && Math.abs(row.value - amount) < 0.001,
+      );
+      if (duplicate) continue;
+
+      result.push({
+        name,
+        qty: Number(qty.toFixed(2)),
+        value: Number(amount.toFixed(2)),
+        page: pageIndex + 1,
+      });
+    }
+  }
+
+  return result;
+}
+
+function mergeDetailedOfferRows(...groups) {
+  const result = [];
+  const seen = new Set();
+
+  for (const group of groups) {
+    for (const row of group || []) {
+      const key = `${row.page ?? ""}|${row.name}|${Number(row.qty || 0).toFixed(2)}|${Number(row.value || 0).toFixed(2)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(row);
     }
   }
 
