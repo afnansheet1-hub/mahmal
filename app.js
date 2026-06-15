@@ -232,7 +232,7 @@ function cleanText(value) {
 }
 
 function normalizeDigits(value) {
-  return String(value)
+  return String(value).normalize("NFKC")
     .replace(/[٠-٩]/g, (digit) => "٠١٢٣٤٥٦٧٨٩".indexOf(digit))
     .replace(/[۰-۹]/g, (digit) => "۰۱۲۳۴۵۶۷۸۹".indexOf(digit))
     .replace(/[−–—]/g, "-")
@@ -467,7 +467,7 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
   dailyOffers.length = 0;
   dailyOffers.push(...extractOnYourOrderOffers(rawText));
   dailyOfferRows.length = 0;
-  const detailedRows = extractDetailedOfferRowsFromRows(rows);
+  const detailedRows = extractDetailedOfferRowsFromRows(rows, pageTexts, rawPageTexts);
   dailyOfferRows.push(...mergeDetailedOfferRows(detailedRows, extractDetailedOfferRowsFromText(rawText)));
   offersSummary = dailyOffers;
   offerDiscountQuantityTotal = dailyOffers.reduce((sum, offer) => sum + offer.qty, 0);
@@ -614,12 +614,17 @@ function isReturnText(value) {
 
 function isReturnPageText(value) {
   const text = normalizeDigits(value);
-  return /\u0645\u0631\u062a\u062c\u0639|\u0645\u0631\u062a\u062c\u0639\u0627\u062a|\u0627\u0633\u062a\u0631\u062c\u0627\u0639|\u0627\u0633\u062a\u0631\u062f\u0627\u062f|\u0627\u0644\u0627\u0633\u062a\u0631\u062f\u0627\u062f\u0627\u062a/.test(text);
+  return /\u0645\u0631\u062a\u062c\u0639|\u0645\u0631\u062a\u062c\u0639\u0627\u062a|\u0627\u0633\u062a\u0631\u062c\u0627\u0639|\u0627\u0633\u062a\u0631\u062f\u0627\u062f|\u0627\u0644\u0627\u0633\u062a\u0631\u062f\u0627\u062f\u0627\u062a|\u062f\u0627\u062f\u0631\u062a\u0633\u0627/.test(text);
+}
+
+function isRefundPageText(value) {
+  const text = normalizeDigits(value);
+  return isReturnPageText(text) && /(?:^|\s)\d+(?:\.\d+)?-/.test(text);
 }
 
 function refundSectionStartIndex(value) {
   return normalizeDigits(value).search(
-    /\u0627\u0644\u0627\u0633\u062a\u0631\u062f\u0627\u062f\u0627\u062a|\u0636\u0631\u0627\u0626\u0628\s+\u0627\u0633\u062a\u0631\u062f\u0627\u062f\s+\u0627\u0644\u0623\u0645\u0648\u0627\u0644|\breturns?\b|\brefunds?\b/i,
+    /\u0627\u0644\u0627\u0633\u062a\u0631\u062f\u0627\u062f\u0627\u062a|\u0636\u0631\u0627\u0626\u0628\s+\u0627\u0633\u062a\u0631\u062f\u0627\u062f\s+\u0627\u0644\u0623\u0645\u0648\u0627\u0644|\u062f\u0627\u062f\u0631\u062a\u0633\u0627|\breturns?\b|\brefunds?\b/i,
   );
 }
 
@@ -729,6 +734,24 @@ function extractNegativeOfferAmount(text) {
   return matches.length ? -Math.max(...matches) : null;
 }
 
+function extractLeadingNegativeOfferAmount(text) {
+  const matches = [...normalizeDigits(text).matchAll(/-\s*([\d,]+\.\d{2})/g)]
+    .map((match) => Number((match[1] || "").replace(/,/g, "")))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return matches.length ? -Math.max(...matches) : null;
+}
+
+function closestLeadingNegativeOfferAmount(text, anchorIndex) {
+  const matches = [...normalizeDigits(text).matchAll(/-\s*([\d,]+\.\d{2})/g)]
+    .map((match) => ({
+      value: -Number((match[1] || "").replace(/,/g, "")),
+      distance: Math.abs(match.index - anchorIndex),
+    }))
+    .filter((match) => Number.isFinite(match.value) && match.value < 0)
+    .sort((a, b) => a.distance - b.distance);
+  return matches[0]?.value ?? null;
+}
+
 function extractOfferQtyFromText(text, amount) {
   const amountAbs = Math.abs(amount || 0);
   const values = [...normalizeDigits(text).matchAll(/(?:^|\s)(\d+(?:\.\d)?)(?:\s|$)/g)]
@@ -812,12 +835,14 @@ function offerNameFromText(value) {
   return "";
 }
 
-function extractDetailedOfferRowsFromRows(rows) {
+function extractDetailedOfferRowsFromRows(rows, pageTexts = [], rawPageTexts = []) {
   const result = [];
   const seen = new Set();
 
   for (const row of rows) {
     const source = `${row.rawText || ""} ${row.product || ""}`;
+    const pageText = pageTextForRow(row, pageTexts, rawPageTexts);
+    if (isRefundPageText(pageText)) continue;
     const name = offerNameFromText(source);
     if (!name || row.amount >= 0 || isReturnText(source) || isReturnPageText(source)) continue;
 
@@ -842,6 +867,8 @@ function extractDetailedOfferRowsFromText(rawText) {
   const pages = String(rawText || "").split(/\f+/);
 
   for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
+    const fullPageText = normalizeDigits(pages[pageIndex] || "").replace(/\u200b/g, " ");
+    if (isRefundPageText(fullPageText)) continue;
     const pageText = normalizeDigits(salesTextOnly(pages[pageIndex] || "")).replace(/\u200b/g, " ");
     if (!pageText.trim()) continue;
 
@@ -864,7 +891,7 @@ function extractDetailedOfferRowsFromText(rawText) {
 
       for (const candidate of candidates) {
         if (isReturnText(candidate) || isReturnPageText(candidate)) continue;
-        const amount = extractNegativeOfferAmount(candidate);
+        const amount = extractLeadingNegativeOfferAmount(candidate);
         if (amount === null) continue;
         const qty = extractOfferQtyFromText(candidate, amount);
         if (qty === null) continue;
@@ -892,7 +919,7 @@ function extractDetailedOfferRowsFromText(rawText) {
       const segment = pageText.slice(start, end).replace(/\s+/g, " ").trim();
       if (isReturnText(segment) || isReturnPageText(segment)) continue;
 
-      const amount = closestNegativeOfferAmount(segment, match.index - start);
+      const amount = closestLeadingNegativeOfferAmount(segment, match.index - start);
       if (amount === null) continue;
       const qty = closestOfferQty(segment, match.index - start, amount);
       if (qty === null) continue;
