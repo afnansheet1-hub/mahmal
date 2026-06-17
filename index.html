@@ -7,7 +7,7 @@
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <link rel="stylesheet" href="./styles.css?v=20260617-5" />
+    <link rel="stylesheet" href="./styles.css?v=20260617-6" />
     <style>
       body.is-locked {
         overflow: hidden;
@@ -22,20 +22,31 @@
         z-index: 10000;
       }
 
-      .maintenance-card.creator-splash-card {
+      #passwordGateForm.creator-splash-card {
         max-height: calc(100vh - 28px);
         overflow: auto;
+      }
+
+      #creatorSplash #passwordGateInput,
+      #creatorSplash .password-submit {
+        display: block !important;
+        width: 100%;
       }
     </style>
   </head>
   <body class="is-locked">
-    <div id="creatorSplash" class="creator-splash" role="status" aria-live="polite">
-      <section class="maintenance-card creator-splash-card" aria-labelledby="maintenanceTitle">
+    <div id="creatorSplash" class="creator-splash" role="dialog" aria-modal="true" aria-labelledby="passwordGateTitle">
+      <form id="passwordGateForm" class="creator-splash-card" autocomplete="off">
         <img src="./assets/match-home-logo.png" alt="MATCH" />
-        <h1 id="maintenanceTitle">الموقع تحت الصيانة</h1>
-        <p class="maintenance-note">نعمل حالياً على تحديث الموقع وتحسين التجربة. يرجى المحاولة لاحقاً.</p>
+        <h1 id="passwordGateTitle">ادخل كلمة المرور للاستمرار في الداشبورد</h1>
+        <label class="password-field">
+          <span>كلمة المرور</span>
+          <input id="passwordGateInput" type="password" inputmode="text" autocomplete="current-password" autofocus required />
+        </label>
+        <button class="password-submit" type="submit">دخول</button>
+        <p id="passwordGateMessage" class="password-message" aria-live="polite"></p>
         <p>تم عمل هذا الموقع من قبل الموظف / محمد الحميدي 2026</p>
-      </section>
+      </form>
     </div>
     <main class="app-shell">
       <section class="hero">
@@ -263,6 +274,6 @@
     </main>
     <script src="./safari-polyfills.js?v=20260614-1"></script>
     <script src="./vendor/pdf.legacy.min.js?v=2.16.105"></script>
-    <script type="module" src="./app.js?v=20260617-5"></script>
+    <script type="module" src="./app.js?v=20260617-6"></script>
   </body>
 </html>

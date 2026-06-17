@@ -1,3 +1,51 @@
+const PASSWORD_HASH = "404a6751034070c30ab53aee4d2b16c8863a4382361b36a9b90c243099492b15";
+const PASSWORD_SESSION_KEY = "match-dashboard-authenticated";
+
+const passwordGate = document.querySelector("#creatorSplash");
+const passwordGateForm = document.querySelector("#passwordGateForm");
+const passwordGateInput = document.querySelector("#passwordGateInput");
+const passwordGateMessage = document.querySelector("#passwordGateMessage");
+
+function unlockSite() {
+  document.body.classList.remove("is-locked");
+  passwordGate?.remove();
+}
+
+function bytesToHex(bytes) {
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function hashPassword(value) {
+  const bytes = new TextEncoder().encode(value);
+  const hashBuffer = await window.crypto.subtle.digest("SHA-256", bytes);
+  return bytesToHex(new Uint8Array(hashBuffer));
+}
+
+if (sessionStorage.getItem(PASSWORD_SESSION_KEY) === "true") {
+  unlockSite();
+} else {
+  passwordGateForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    passwordGateMessage.textContent = "";
+
+    if (!window.crypto?.subtle) {
+      passwordGateMessage.textContent = "المتصفح لا يدعم التحقق الآمن من كلمة المرور";
+      return;
+    }
+
+    const enteredHash = await hashPassword(passwordGateInput.value);
+    if (enteredHash === PASSWORD_HASH) {
+      sessionStorage.setItem(PASSWORD_SESSION_KEY, "true");
+      unlockSite();
+      return;
+    }
+
+    passwordGateInput.value = "";
+    passwordGateInput.focus();
+    passwordGateMessage.textContent = "كلمة المرور غير صحيحة";
+  });
+}
+
 const pdfjsLib = window.pdfjsLib;
 
 if (!pdfjsLib) {
