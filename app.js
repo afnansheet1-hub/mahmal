@@ -37,6 +37,14 @@ const els = {
   previewLabel: document.querySelector("#previewLabel"),
 };
 
+const creatorSplash = document.querySelector("#creatorSplash");
+if (creatorSplash) {
+  window.setTimeout(() => {
+    creatorSplash.classList.add("is-hidden");
+    window.setTimeout(() => creatorSplash.remove(), 450);
+  }, 5000);
+}
+
 const moneyFormatter = new Intl.NumberFormat("ar-SA", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
