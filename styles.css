@@ -41,15 +41,121 @@ body::before {
   backdrop-filter: blur(0.2px);
 }
 
+body.is-locked {
+  overflow: hidden;
+}
+
+body.is-locked .app-shell {
+  display: none;
+}
+
+.password-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background:
+    linear-gradient(rgba(247, 249, 245, 0.76), rgba(247, 249, 245, 0.92)),
+    url("./assets/match-logo-bg.webp") center / min(900px, 92vw) auto no-repeat,
+    var(--bg);
+}
+
+body:not(.is-locked) .password-gate {
+  display: none;
+}
+
+.password-card {
+  width: min(430px, 100%);
+  padding: clamp(22px, 5vw, 34px);
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 28px 80px rgba(5, 22, 18, 0.28);
+  text-align: center;
+}
+
+.password-card img {
+  display: block;
+  width: clamp(110px, 30vw, 170px);
+  height: auto;
+  margin: 0 auto 18px;
+  object-fit: contain;
+}
+
+.password-card h1 {
+  margin-bottom: 18px;
+  color: var(--accent-strong);
+  font-size: clamp(28px, 7vw, 42px);
+  line-height: 1.15;
+}
+
+.password-field {
+  display: grid;
+  gap: 8px;
+  text-align: start;
+}
+
+.password-field span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.password-field input {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 14px;
+  color: var(--ink);
+  font: inherit;
+  background: #fff;
+  outline: none;
+}
+
+.password-field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+}
+
+.password-submit {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 14px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+.password-submit:hover,
+.password-submit:focus-visible {
+  background: var(--accent-strong);
+}
+
+.password-message {
+  min-height: 24px;
+  margin-top: 12px;
+  color: var(--clay);
+  font-size: 14px;
+  font-weight: 800;
+}
+
 .creator-splash {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: 10000;
   display: grid;
   place-items: center;
   padding: 22px;
   background: rgba(10, 24, 20, 0.24);
   backdrop-filter: blur(5px);
+  overflow: auto;
   opacity: 1;
   visibility: visible;
   transition:
@@ -65,7 +171,9 @@ body::before {
 
 .creator-splash-card {
   width: min(520px, 100%);
-  padding: clamp(20px, 4vw, 30px);
+  max-height: calc(100vh - 28px);
+  overflow: auto;
+  padding: clamp(16px, 3vw, 24px);
   border: 1px solid rgba(255, 255, 255, 0.62);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.94);
@@ -75,17 +183,33 @@ body::before {
 
 .creator-splash-card img {
   display: block;
-  width: clamp(118px, 28vw, 190px);
+  width: clamp(92px, 22vw, 135px);
   height: auto;
-  margin: 0 auto 18px;
+  margin: 0 auto 12px;
   object-fit: contain;
 }
 
 .creator-splash-card p {
   color: var(--accent-strong);
-  font-size: clamp(18px, 3.5vw, 25px);
+  font-size: clamp(17px, 3vw, 22px);
   font-weight: 800;
-  line-height: 1.55;
+  line-height: 1.4;
+}
+
+.creator-splash-card h1,
+.creator-splash-card .password-title {
+  margin: 12px 0 10px;
+  color: var(--ink);
+  font-size: clamp(21px, 4vw, 28px);
+  line-height: 1.2;
+}
+
+.maintenance-note {
+  margin-bottom: 14px;
+  color: var(--clay);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.5;
 }
 
 .app-shell {
