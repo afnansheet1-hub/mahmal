@@ -529,7 +529,7 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
       if (row.bundleKey) counts[row.bundleKey] = (counts[row.bundleKey] || 0) + row.repeatCount;
       return counts;
     },
-    { pinkMusk: 0, discoveryWinter: 0, magicD5: 0, mmt: 0, vintage: 0, vibes: 0 },
+    createEmptyBundleCounts(),
   );
   dailyBundleCounts = extractDailyBundleCounts(rawText);
   mappedDailyQuantities = extractMappedDailyQuantities(latestPdfText);
@@ -1343,6 +1343,26 @@ function sumDiscountRepeatsByUnit(rows, target) {
   }, 0);
 }
 
+function createEmptyBundleCounts() {
+  return { pinkMusk: 0, discoveryWinter: 0, magicD5: 0, mmt: 0, vintage: 0, vibes: 0 };
+}
+
+function sumDiscountRepeatsByOfferMap(rows, discountCode = "") {
+  const counts = createEmptyBundleCounts();
+  for (const row of rows) {
+    const rowDiscountCode = discountCode || discountCodeFromProduct(row.product || "");
+    const matches = OFFER_DISCOUNT_MAP.filter((offer) => normalizeName(offer.discountCode) === normalizeName(rowDiscountCode));
+    for (const offer of matches) {
+      const repeats = repeatCountFromDiscount(row.amount, offer.unitDiscount);
+      if (repeats) {
+        counts[offer.bundleKey] = (counts[offer.bundleKey] || 0) + repeats;
+        break;
+      }
+    }
+  }
+  return counts;
+}
+
 function sumQtyByKeywords(products, keywords) {
   return products
     .filter((row) => {
@@ -1455,21 +1475,11 @@ function extractDiscountBundleCounts(text) {
   while ((match = amountFirst.exec(normalized)) !== null) {
     rows.push({ qty: Number(match[2]), amount: Number(match[1].replace(/,/g, "")) });
   }
-  return {
-    pinkMusk: sumDiscountRepeatsByUnit(rows, 46.09),
-    discoveryWinter: sumDiscountRepeatsByUnit(rows, 67.83),
-    magicD5: 0,
-    mmt: sumDiscountRepeatsByUnit(rows, 100.01),
-  };
+  return sumDiscountRepeatsByOfferMap(rows, "on your order 100%");
 }
 
 function extractDiscountBundleCountsFromRows(rows) {
-  return {
-    pinkMusk: sumDiscountRepeatsByUnit(rows.filter((row) => isOrderDiscountName(row.product)), 46.09),
-    discoveryWinter: sumDiscountRepeatsByUnit(rows.filter((row) => isOrderDiscountName(row.product)), 67.83),
-    magicD5: sumDiscountRepeatsByUnit(rows.filter((row) => isOrder100DiscountName(row.product)), 21.74),
-    mmt: sumDiscountRepeatsByUnit(rows.filter((row) => isMmtBundleName(row.product)), 100.01),
-  };
+  return sumDiscountRepeatsByOfferMap(rows);
 }
 
 function mergeDiscountBundleCounts(...counts) {
@@ -1478,6 +1488,8 @@ function mergeDiscountBundleCounts(...counts) {
     discoveryWinter: Math.max(...counts.map((count) => count.discoveryWinter || 0)),
     magicD5: Math.max(...counts.map((count) => count.magicD5 || 0)),
     mmt: Math.max(...counts.map((count) => count.mmt || 0)),
+    vintage: Math.max(...counts.map((count) => count.vintage || 0)),
+    vibes: Math.max(...counts.map((count) => count.vibes || 0)),
   };
 }
 
