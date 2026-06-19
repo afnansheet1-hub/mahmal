@@ -524,13 +524,14 @@ function applyAnalysisRows({ rows, pageTexts, rawPageTexts, pdf, name, usedOcr }
   allProducts = allExtractProducts.filter((row) => row.amount > 0);
   aiPdfTotalQty = null;
   aiOfferDiscountQty = null;
-  discountBundleCounts = offerReviewRows.reduce(
+  const groupedBundleCounts = offerReviewRows.reduce(
     (counts, row) => {
       if (row.bundleKey) counts[row.bundleKey] = (counts[row.bundleKey] || 0) + row.repeatCount;
       return counts;
     },
     createEmptyBundleCounts(),
   );
+  discountBundleCounts = dailyOfferRows.length ? bundleCountsFromDetailedOfferRows(dailyOfferRows) : groupedBundleCounts;
   dailyBundleCounts = extractDailyBundleCounts(rawText);
   mappedDailyQuantities = extractMappedDailyQuantities(latestPdfText);
   renderDashboard(pdf.numPages, allProducts, latestPdfText, name);
@@ -1352,15 +1353,31 @@ function sumDiscountRepeatsByOfferMap(rows, discountCode = "") {
   for (const row of rows) {
     const rowDiscountCode = discountCode || discountCodeFromProduct(row.product || "");
     const matches = OFFER_DISCOUNT_MAP.filter((offer) => normalizeName(offer.discountCode) === normalizeName(rowDiscountCode));
+    const candidates = [];
     for (const offer of matches) {
       const repeats = repeatCountFromDiscount(row.amount, offer.unitDiscount);
       if (repeats) {
-        counts[offer.bundleKey] = (counts[offer.bundleKey] || 0) + repeats;
-        break;
+        const expected = repeats * Math.abs(offer.unitDiscount);
+        const difference = Math.abs(Math.abs(row.amount) - expected);
+        const qtyPenalty = row.qty && Math.abs(repeats - row.qty) < 0.001 ? 0 : 1;
+        candidates.push({ offer, repeats, difference, qtyPenalty });
       }
     }
+    candidates.sort((a, b) => a.qtyPenalty - b.qtyPenalty || a.difference - b.difference);
+    const best = candidates[0];
+    if (best) counts[best.offer.bundleKey] = (counts[best.offer.bundleKey] || 0) + best.repeats;
   }
   return counts;
+}
+
+function bundleCountsFromDetailedOfferRows(rows) {
+  return sumDiscountRepeatsByOfferMap(
+    rows.map((row) => ({
+      product: row.name,
+      amount: row.value,
+      qty: row.qty,
+    })),
+  );
 }
 
 function sumQtyByKeywords(products, keywords) {
