@@ -1335,6 +1335,14 @@ function discountUnitMatches(row, target) {
   return row.qty ? Math.abs(Math.abs(row.amount / row.qty) - target) < 0.02 : false;
 }
 
+function sumDiscountRepeatsByUnit(rows, target) {
+  return rows.reduce((sum, row) => {
+    const repeats = repeatCountFromDiscount(row.amount, target);
+    if (repeats) return sum + repeats;
+    return sum + (discountUnitMatches(row, target) ? row.qty : 0);
+  }, 0);
+}
+
 function sumQtyByKeywords(products, keywords) {
   return products
     .filter((row) => {
@@ -1448,37 +1456,19 @@ function extractDiscountBundleCounts(text) {
     rows.push({ qty: Number(match[2]), amount: Number(match[1].replace(/,/g, "")) });
   }
   return {
-    pinkMusk: rows
-      .filter((row) => discountUnitMatches(row, 46.09))
-      .reduce((sum, row) => sum + row.qty, 0),
-    discoveryWinter: rows
-      .filter((row) => discountUnitMatches(row, 67.83))
-      .reduce((sum, row) => sum + row.qty, 0),
+    pinkMusk: sumDiscountRepeatsByUnit(rows, 46.09),
+    discoveryWinter: sumDiscountRepeatsByUnit(rows, 67.83),
     magicD5: 0,
-    mmt: rows
-      .filter((row) => discountUnitMatches(row, 100.01))
-      .reduce((sum, row) => sum + row.qty, 0),
+    mmt: sumDiscountRepeatsByUnit(rows, 100.01),
   };
 }
 
 function extractDiscountBundleCountsFromRows(rows) {
   return {
-    pinkMusk: rows
-      .filter((row) => isOrderDiscountName(row.product))
-      .filter((row) => discountUnitMatches(row, 46.09))
-      .reduce((sum, row) => sum + row.qty, 0),
-    discoveryWinter: rows
-      .filter((row) => isOrderDiscountName(row.product))
-      .filter((row) => discountUnitMatches(row, 67.83))
-      .reduce((sum, row) => sum + row.qty, 0),
-    magicD5: rows
-      .filter((row) => isOrder100DiscountName(row.product))
-      .filter((row) => discountUnitMatches(row, 21.74))
-      .reduce((sum, row) => sum + row.qty, 0),
-    mmt: rows
-      .filter((row) => isMmtBundleName(row.product))
-      .filter((row) => discountUnitMatches(row, 100.01))
-      .reduce((sum, row) => sum + row.qty, 0),
+    pinkMusk: sumDiscountRepeatsByUnit(rows.filter((row) => isOrderDiscountName(row.product)), 46.09),
+    discoveryWinter: sumDiscountRepeatsByUnit(rows.filter((row) => isOrderDiscountName(row.product)), 67.83),
+    magicD5: sumDiscountRepeatsByUnit(rows.filter((row) => isOrder100DiscountName(row.product)), 21.74),
+    mmt: sumDiscountRepeatsByUnit(rows.filter((row) => isMmtBundleName(row.product)), 100.01),
   };
 }
 
